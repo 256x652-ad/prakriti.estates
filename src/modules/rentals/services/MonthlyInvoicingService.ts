@@ -130,6 +130,22 @@ export class MonthlyInvoicingService {
           });
         }
 
+        // Emit transactional outbox event
+        await tx.outboxEvent.create({
+          data: {
+            eventType: "INVOICE_GENERATED",
+            payload: {
+              invoiceId: createdInvoice.id,
+              tenancyId: tenancy.id,
+              tenantId: tenancy.tenantId,
+              landlordId: tenancy.landlordId,
+              totalAmount: createdInvoice.totalAmount,
+              dueDate: createdInvoice.dueDate.toISOString(),
+            },
+            status: "PENDING",
+          },
+        });
+
         return createdInvoice;
       });
 
