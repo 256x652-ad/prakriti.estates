@@ -18,6 +18,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1149.0",
     "@aws-sdk/s3-request-presigner": "^3.1149.0",
+    "@prisma/client": "^5.22.0",
     "@tanstack/react-query": "^5.104.1",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.12",
@@ -31,8 +32,7 @@
     "react-map-gl": "^8.1.3",
     "supercluster": "^9.1.0",
     "use-supercluster": "^1.2.0",
-    "zod": "^4.6.5",
-    "@prisma/client": "^5.22.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
