@@ -270,18 +270,31 @@ model PropertyLock {
   updatedAt       DateTime          @updatedAt
 }
 
+enum AuditSyncStatus {
+  DRAFT
+  IN_REVIEW
+  SUBMITTED
+  SYNCHRONIZED
+}
+
 model PropertyAudit {
-  id              String       @id @default(uuid())
+  id              String          @id @default(uuid())
   propertyId      String
-  property        Property     @relation(fields: [propertyId], references: [id])
+  property        Property        @relation(fields: [propertyId], references: [id])
   consultantId    String
-  consultant      User         @relation("ConsultantAudits", fields: [consultantId], references: [id])
+  consultant      User            @relation("ConsultantAudits", fields: [consultantId], references: [id])
   type            AuditType
-  score           Int          
-  findings        String       
+  score           Int             @default(0)
+  findings        String          @default("")
+  version         Int             @default(1)
+  syncStatus      AuditSyncStatus @default(DRAFT)
+  checklist       Json?           // Array of { itemId, label, passed, notes }
+  measurements    Json?           // Array of { area, dimension, deflectionMm, remarks }
+  mediaUrls       String[]        @default([])
+  clientUpdatedAt DateTime?
   expiresAt       DateTime?    
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model ServiceRequest {
