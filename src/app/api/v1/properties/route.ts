@@ -5,6 +5,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { PropertyLifecycleService } from "@/modules/properties/services/PropertyLifecycleService";
 import { ApiResponseHelper } from "@/lib/api/response";
 import { PropertyType, Prisma } from "@prisma/client";
+import { enforceKycGate, KycRequiredError } from "@/modules/kyc/guards/enforceKycGate";
 import { z } from "zod";
 
 const PropertyCreationSchema = z.object({
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+
+    // Strict KYC Compliance Gate: Listing creation requires verified identity
+    await enforceKycGate(userId);
+
     const body = await req.json();
     const validation = PropertyCreationSchema.safeParse(body);
 
@@ -137,6 +142,9 @@ export async function POST(req: NextRequest) {
 
     return ApiResponseHelper.success(property, undefined, 201);
   } catch (error: any) {
+    if (error instanceof KycRequiredError || error.name === "KycRequiredError" || error.code === "KYC_REQUIRED") {
+      return ApiResponseHelper.error("KYC_REQUIRED", error.message, 403);
+    }
     console.error("[Property Creation Error]", error);
     return ApiResponseHelper.error("INTERNAL_SERVER_ERROR", error.message || "Failed to create property", 500);
   }

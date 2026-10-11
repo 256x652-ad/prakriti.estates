@@ -14,6 +14,7 @@ export type ApiErrorCode =
   | "REGISTRATION_FAILED"
   | "OTP_SEND_FAILED"
   | "OTP_VERIFY_FAILED"
+  | "KYC_REQUIRED"
   | "INTERNAL_SERVER_ERROR";
 
 export interface PaginationMeta {

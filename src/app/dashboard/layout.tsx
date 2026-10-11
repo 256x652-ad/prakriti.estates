@@ -47,6 +47,12 @@ export default async function DashboardLayout({
                 Marketplace
               </Link>
               <Link
+                href="/dashboard/kyc"
+                className="px-3 py-1.5 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition flex items-center gap-1"
+              >
+                <span>🛡️</span> KYC Center
+              </Link>
+              <Link
                 href="/consultants"
                 className="px-3 py-1.5 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition"
               >
