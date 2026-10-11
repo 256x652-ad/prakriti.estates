@@ -129,7 +129,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Upon sign in, inject database-verified identity, roles, and KYC status
       if (user) {
         token.id = user.id;
@@ -137,6 +137,26 @@ export const authOptions: NextAuthOptions = {
         token.roles = (user as any).roles || [Role.USER];
         token.kycStatus = (user as any).kycStatus || "PENDING";
       }
+
+      // Handle Impersonation Session Update Triggers
+      if (trigger === "update" && session) {
+        if (session.impersonateUserId) {
+          // Store original admin identity if not already stored
+          token.impersonatorId = token.impersonatorId || (token.id as string);
+          token.impersonatorRole = token.impersonatorRole || ((token.roles as string[])?.[0] || "SUPER_ADMIN");
+          token.id = session.impersonateUserId;
+          token.roles = session.impersonateRoles || [Role.USER];
+          token.phoneNumber = session.impersonatePhone || token.phoneNumber;
+          token.kycStatus = session.impersonateKycStatus || "VERIFIED";
+        } else if (session.revertImpersonation && token.impersonatorId) {
+          // Revert to original Super Admin
+          token.id = token.impersonatorId;
+          token.roles = [Role.ADMIN];
+          delete token.impersonatorId;
+          delete token.impersonatorRole;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -146,6 +166,10 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).phoneNumber = token.phoneNumber;
         (session.user as any).roles = token.roles as Role[];
         (session.user as any).kycStatus = token.kycStatus;
+        if (token.impersonatorId) {
+          (session.user as any).impersonatorId = token.impersonatorId;
+          (session.user as any).impersonatorRole = token.impersonatorRole;
+        }
       }
       return session;
     },

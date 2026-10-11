@@ -22,8 +22,10 @@ export class PropertyLifecycleService {
       // Allowed for owner / seller
     } else if (current === "PENDING_APPROVAL" && (targetStatus === "PUBLISHED" || targetStatus === "REJECTED")) {
       if (!isAdmin) throw new Error("Only an administrator can approve or reject properties");
-    } else if (current === "PUBLISHED" && targetStatus === "ARCHIVED") {
-      // Allowed for admin or owner
+    } else if (current === "PUBLISHED" && (targetStatus === "ARCHIVED" || targetStatus === "REJECTED")) {
+      if (targetStatus === "REJECTED" && !isAdmin) throw new Error("Only an administrator can suspend or reject published properties");
+    } else if ((current === "ARCHIVED" || current === "REJECTED") && targetStatus === "PUBLISHED") {
+      if (!isAdmin) throw new Error("Only an administrator can restore properties to published status");
     } else {
       throw new Error(`Invalid property lifecycle transition from ${current} to ${targetStatus}`);
     }
