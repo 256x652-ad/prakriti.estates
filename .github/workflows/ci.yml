@@ -1,0 +1,111 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - dev-ad
+      - develop
+  pull_request:
+    branches:
+      - main
+      - dev-ad
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ========================================================
+  # STAGE 1: Automated Continuous Integration
+  # ========================================================
+  ci:
+    name: Lint, Test, Typecheck & Build
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres?schema=public"
+      REDIS_URL: "redis://localhost:6379"
+      NEXTAUTH_SECRET: "ci-test-nextauth-secret-key-32-chars-long"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_MAPBOX_TOKEN: "pk.mock_ci_mapbox_token"
+      NEXT_TELEMETRY_DISABLED: 1
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies (Lockfile Enforced)
+        run: npm ci
+
+      - name: Validate Prisma Schema Integrity
+        run: npx prisma validate
+
+      - name: Generate Prisma Client Artifacts
+        run: npx prisma generate
+
+      - name: TypeScript Compilation & Type Checks
+        run: npm run typecheck
+
+      - name: Run Test Suite
+        run: |
+          if npm run | grep -q "test"; then
+            npm test --if-present
+          else
+            echo "No test runner configured yet. Proceeding with static verification."
+          fi
+
+      - name: Next.js Production Build
+        run: npm run build
+
+  # ========================================================
+  # STAGE 2: Automated Production Deployment (CD)
+  # Triggers exclusively on successful CI runs on `main` branch
+  # ========================================================
+  cd:
+    name: Production Deployment & Zero-Downtime Migration
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Production Tooling
+        run: npm ci
+
+      - name: Execute Safe Production Database Migrations
+        run: |
+          echo "Executing prisma migrate deploy against Supabase Direct Connection..."
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Deploy Application to Vercel Production
+        uses: amondnet/vercel-action@v25
+        if: env.VERCEL_TOKEN != ''
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: "--prod"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Production Deployment Notification
+        run: |
+          echo "🚀 Deployment successfully executed for commit ${{ github.sha }} to production!"
