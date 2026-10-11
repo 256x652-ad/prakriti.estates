@@ -572,6 +572,8 @@ enum AuditActionType {
   MAINTENANCE_OVERRIDE
   FEE_CONFIG_MUTATION
   THEME_UPDATE
+  FEATURE_FLAG_TOGGLE
+  GLOBAL_SETTING_MUTATION
 }
 
 model AuditLog {
@@ -593,4 +595,33 @@ model AuditLog {
   @@index([actionType])
   @@index([targetEntity])
   @@index([createdAt])
+}
+
+model GlobalSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "MAINTENANCE_MODE", "DEFAULT_CURRENCY", "SUPPORT_PHONE"
+  value       Json     // Dynamic JSON payload (string, number, boolean, or complex object)
+  description String?
+  isPublic    Boolean  @default(false) // Exposed to frontend/mobile without auth
+  updatedBy   String?  // Admin ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([isPublic])
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "ENABLE_SHORT_STAY", "ENABLE_WHATSAPP", "ENABLE_HRA_RECEIPTS"
+  description String?
+  isEnabled   Boolean  @default(false)
+  rolloutPct  Int      @default(100) // 0-100% gradual rollout percentage
+  rules       Json?    // Targeting rules: { allowedRoles: ["ADMIN", "BETA_USER"], userIds: [] }
+  updatedBy   String?  // Admin ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([isEnabled])
 }
