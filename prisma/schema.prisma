@@ -192,6 +192,8 @@ model Property {
 
   @@index([location], name: "property_location_idx", type: Gist)
   @@index([boundary], name: "property_boundary_idx", type: Gist)
+  @@index([type, lockStatus, price])
+  @@index([isPrakritiCertified])
 }
 
 model PropertyBuyDetails {
@@ -268,6 +270,9 @@ model PropertyLock {
   expiresAt       DateTime
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([userId, status])
 }
 
 enum AuditSyncStatus {
@@ -425,6 +430,9 @@ model MonthlyInvoice {
   updatedAt       DateTime       @updatedAt
 
   lineItems       InvoiceLineItem[]
+
+  @@unique([tenancyId, invoiceMonth])
+  @@index([status, dueDate])
 }
 
 model InvoiceLineItem {
