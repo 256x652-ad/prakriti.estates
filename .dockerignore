@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.github
+*.log
+.env
+.env.local
+.env.production
+README.md
+test-all.ts
+test-workflows.ts

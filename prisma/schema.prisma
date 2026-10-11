@@ -1,0 +1,488 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  USER
+  BUYER
+  SELLER
+  AGENT
+  CONSULTANT
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  MANUAL_REVIEW
+  REJECTED
+}
+
+enum PropertyType {
+  BUY
+  RENT
+  STAY
+}
+
+enum LifecycleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LockStatus {
+  AVAILABLE
+  LOCKED
+  COMPLETED
+}
+
+enum PropertyLockState {
+  REQUESTED
+  ACTIVE
+  EXPIRED
+  RELEASED
+}
+
+enum AuditType {
+  STRUCTURAL
+  VASTU
+  LEGAL
+}
+
+enum ServiceRequestType {
+  LOAN
+  LEGAL
+  VASTU
+  STRUCTURAL
+  PRAKRITI_CERTIFIED
+}
+
+enum ServiceRequestStatus {
+  REQUESTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  DISPUTED
+  PARTIALLY_REFUNDED
+}
+
+enum TransactionType {
+  ESCROW
+  TOKEN
+  MAINTENANCE_LEDGER
+}
+
+enum FeeType {
+  RENTAL_TOKEN
+  PURCHASE_PLATFORM_FEE
+  AUDIT_FEE
+  MAINTENANCE_FEE
+  BUYER_PLATFORM_FEE
+  SELLER_SUCCESS_FEE
+}
+
+enum FeeCalculationMethod {
+  PERCENTAGE
+  FLAT_AMOUNT
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerEventCode {
+  TOKEN_PAYMENT
+  PLATFORM_FEE_DEDUCTION
+  TAX_DEDUCTION
+  REFUND
+  MAINTENANCE_DEDUCTION
+  ESCROW_HOLD
+  ESCROW_RELEASE
+  DISPUTE_RESOLUTION
+}
+
+model User {
+  id              String    @id @default(uuid())
+  phoneNumber     String    @unique
+  roles           Role[]    @default([USER])
+  kycStatus       KycStatus @default(PENDING)
+  otpHash         String?
+  otpExpiresAt    DateTime?
+  firstName       String?
+  lastName        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  properties      Property[]
+  services        ServiceRequest[]
+  transactions    LedgerTransaction[]    @relation("UserTransactions")
+  kycVerifications KycVerification[]
+  auditsConducted PropertyAudit[]        @relation("ConsultantAudits")
+  ledgerEntries   FinancialLedgerEntry[] @relation("UserLedgerEntries")
+  stayReservations StayReservation[]
+  savedProperties  SavedProperty[]
+  savedSearches    SavedSearch[]
+  themeUpdates     ThemeConfiguration[] @relation("AdminThemeUpdates")
+  tenanciesAsTenant Tenancy[]           @relation("TenantRelation")
+  tenanciesAsLandlord Tenancy[]         @relation("LandlordRelation")
+  impersonationsInitiated ImpersonationAuditLog[] @relation("AdminImpersonator")
+  impersonationsReceived  ImpersonationAuditLog[] @relation("ImpersonatedUser")
+}
+
+model KycVerification {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  provider        String
+  providerRef     String?  @unique
+  status          KycStatus @default(PENDING)
+  failureReason   String?
+  documentType    String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Property {
+  id                 String                     @id @default(uuid())
+  title              String
+  description        String
+  type               PropertyType
+  lifecycleStatus    LifecycleStatus            @default(DRAFT)
+  lockStatus         LockStatus                 @default(AVAILABLE)
+  isPrakritiCertified Boolean                   @default(false) 
+  price              Decimal
+  ownerId            String
+  owner              User                       @relation(fields: [ownerId], references: [id])
+  
+  location           Unsupported("geometry(Point, 4326)")?
+  boundary           Unsupported("geometry(Polygon, 4326)")?
+  
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  // Polymorphic Relationships
+  buyDetails         PropertyBuyDetails?
+  rentDetails        PropertyRentDetails?
+  stayDetails        PropertyStayDetails?
+
+  serviceRequests    ServiceRequest[]
+  transactions       LedgerTransaction[]
+  locks              PropertyLock[]
+  audits             PropertyAudit[]
+  stayReservations   StayReservation[]
+  savedBy            SavedProperty[]
+  tenancies          Tenancy[]
+
+  @@index([location], name: "property_location_idx", type: Gist)
+  @@index([boundary], name: "property_boundary_idx", type: Gist)
+}
+
+model PropertyBuyDetails {
+  id               String   @id @default(uuid())
+  propertyId       String   @unique
+  property         Property @relation(fields: [propertyId], references: [id])
+  plotArea         Decimal
+  totalPrice       Decimal
+  emiAvailable     Boolean  @default(false)
+}
+
+model PropertyRentDetails {
+  id               String   @id @default(uuid())
+  propertyId       String   @unique
+  property         Property @relation(fields: [propertyId], references: [id])
+  securityDeposit  Decimal
+  isMin11Months    Boolean  @default(true)
+  tenantPreferences String? // e.g. "Families only, No pets"
+}
+
+model PropertyStayDetails {
+  id               String   @id @default(uuid())
+  propertyId       String   @unique
+  property         Property @relation(fields: [propertyId], references: [id])
+  dailyRate        Decimal
+  weekendRate      Decimal?
+  cancellationRule String   // e.g. "Strict", "Flexible"
+}
+
+model StayReservation {
+  id               String   @id @default(uuid())
+  propertyId       String
+  property         Property @relation(fields: [propertyId], references: [id])
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  checkInDate      DateTime
+  checkOutDate     DateTime
+  totalAmount      Decimal
+  status           String   @default("CONFIRMED") // CONFIRMED, CANCELLED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([propertyId, checkInDate, checkOutDate])
+}
+
+model SavedProperty {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  propertyId       String
+  property         Property @relation(fields: [propertyId], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, propertyId])
+}
+
+model SavedSearch {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  queryParameters  Json     
+  notifyViaEmail   Boolean  @default(true)
+  createdAt        DateTime @default(now())
+}
+
+model PropertyLock {
+  id              String            @id @default(uuid())
+  propertyId      String
+  property        Property          @relation(fields: [propertyId], references: [id])
+  userId          String            
+  status          PropertyLockState @default(REQUESTED)
+  amount          Decimal
+  paymentRef      String?           @unique
+  expiresAt       DateTime
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model PropertyAudit {
+  id              String       @id @default(uuid())
+  propertyId      String
+  property        Property     @relation(fields: [propertyId], references: [id])
+  consultantId    String
+  consultant      User         @relation("ConsultantAudits", fields: [consultantId], references: [id])
+  type            AuditType
+  score           Int          
+  findings        String       
+  expiresAt       DateTime?    
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model ServiceRequest {
+  id         String               @id @default(uuid())
+  type       ServiceRequestType
+  status     ServiceRequestStatus @default(REQUESTED)
+  propertyId String
+  property   Property             @relation(fields: [propertyId], references: [id])
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id])
+  notes      String?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+}
+
+model LedgerTransaction {
+  id            String            @id @default(uuid())
+  type          TransactionType
+  status        TransactionStatus @default(PENDING)
+  amount        Decimal
+  currency      String            @default("INR")
+  userId        String
+  user          User              @relation("UserTransactions", fields: [userId], references: [id])
+  propertyId    String?
+  property      Property?         @relation(fields: [propertyId], references: [id])
+  referenceId   String?           @unique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  entries       FinancialLedgerEntry[]
+}
+
+model FeeConfiguration {
+  id               String               @id @default(uuid())
+  type             FeeType
+  method           FeeCalculationMethod
+  value            Decimal
+  effectiveFrom    DateTime             @default(now())
+  effectiveUntil   DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model FinancialLedgerEntry {
+  id             String            @id @default(uuid())
+  transactionId  String
+  transaction    LedgerTransaction @relation(fields: [transactionId], references: [id])
+  userId         String
+  user           User              @relation("UserLedgerEntries", fields: [userId], references: [id])
+  entryType      LedgerEntryType
+  eventCode      LedgerEventCode
+  amount         Decimal
+  currency       String            @default("INR")
+  balanceAfter   Decimal?
+  notes          String?
+  createdAt      DateTime          @default(now())
+}
+
+model ThemeConfiguration {
+  id              String   @id @default(uuid())
+  primaryColor    String   // strict hex, e.g. #22c55e
+  secondaryColor  String
+  backgroundLight String
+  backgroundDark  String
+  enableDarkMode  Boolean  @default(false)
+  
+  updatedById     String
+  updatedBy       User     @relation("AdminThemeUpdates", fields: [updatedById], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum TenancyStatus {
+  ACTIVE
+  RENEWING
+  TERMINATED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum LineItemType {
+  RENT
+  MAINTENANCE
+  TAXES
+  METER_USAGE
+  CREDIT_ADJUSTMENT
+  DEBIT_ADJUSTMENT
+}
+
+model Tenancy {
+  id              String        @id @default(uuid())
+  propertyId      String
+  property        Property      @relation(fields: [propertyId], references: [id])
+  tenantId        String
+  tenant          User          @relation("TenantRelation", fields: [tenantId], references: [id])
+  landlordId      String
+  landlord        User          @relation("LandlordRelation", fields: [landlordId], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  depositAmount   Float
+  rentAmount      Float
+  status          TenancyStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  invoices        MonthlyInvoice[]
+  meterReadings   MeterReading[]
+  maintenanceTickets MaintenanceTicket[]
+}
+
+model MonthlyInvoice {
+  id              String         @id @default(uuid())
+  tenancyId       String
+  tenancy         Tenancy        @relation(fields: [tenancyId], references: [id])
+  invoiceMonth    DateTime       // Represents the billing period (e.g. 2026-10-01)
+  status          InvoiceStatus  @default(DRAFT)
+  dueDate         DateTime
+  totalAmount     Float          // Cached total to avoid recounting lines constantly
+  paidAt          DateTime?
+  receiptUrl      String?        // Secure S3 URL for HRA receipt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  lineItems       InvoiceLineItem[]
+}
+
+model InvoiceLineItem {
+  id              String         @id @default(uuid())
+  invoiceId       String
+  invoice         MonthlyInvoice @relation(fields: [invoiceId], references: [id])
+  type            LineItemType
+  amount          Float
+  description     String
+  createdAt       DateTime       @default(now())
+}
+
+model MeterReading {
+  id              String         @id @default(uuid())
+  tenancyId       String
+  tenancy         Tenancy        @relation(fields: [tenancyId], references: [id])
+  readingDate     DateTime
+  previousUnits   Float
+  currentUnits    Float
+  ratePerUnit     Float
+  photoUrl        String         // Secure S3 URL path
+  isBilled        Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+enum MaintenanceTicketStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+model MaintenanceTicket {
+  id              String                  @id @default(uuid())
+  tenancyId       String
+  tenancy         Tenancy                 @relation(fields: [tenancyId], references: [id])
+  title           String
+  description     String
+  status          MaintenanceTicketStatus @default(OPEN)
+  estimatedCost   Float?
+  approvedCost    Float?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model OutboxEvent {
+  id          String            @id @default(uuid())
+  eventType   String            // e.g., "LAND_PLOT_RELATED_EVENT"
+  payload     Json              // The event payload
+  status      OutboxEventStatus @default(PENDING)
+  error       String?
+  createdAt   DateTime          @default(now())
+  processedAt DateTime?
+}
+
+model ImpersonationAuditLog {
+  id              String   @id @default(uuid())
+  adminUserId     String
+  adminUser       User     @relation("AdminImpersonator", fields: [adminUserId], references: [id])
+  targetUserId    String
+  targetUser      User     @relation("ImpersonatedUser", fields: [targetUserId], references: [id])
+  reason          String
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  ipAddress       String?
+}

@@ -1,0 +1,53 @@
+{
+  "name": "prakriti-estates",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "test": "tsx test-all.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1149.0",
+    "@aws-sdk/s3-request-presigner": "^3.1149.0",
+    "@tanstack/react-query": "^5.104.1",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^6.3.12",
+    "ioredis": "^6.0.0",
+    "mapbox-gl": "^3.32.0",
+    "next": "^16.4.0",
+    "next-auth": "^4.24.15",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-map-gl": "^8.1.3",
+    "supercluster": "^9.1.0",
+    "use-supercluster": "^1.2.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@prisma/client": "^5.22.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mapbox-gl": "^3.4.1",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/supercluster": "^7.1.3",
+    "autoprefixer": "^10.6.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^14.1.0",
+    "lucide-react": "^1.55.0",
+    "postcss": "^8.5.29",
+    "prisma": "^5.22.0",
+    "react-hook-form": "^7.89.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "7.0.2"
+  }
+}
