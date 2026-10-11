@@ -8,6 +8,10 @@ export type ApiErrorCode =
   | "CONFLICT_PROPERTY_LOCKED"
   | "IDEMPOTENCY_VIOLATION"
   | "PAYMENT_FAILED"
+  | "RATE_LIMIT_EXCEEDED"
+  | "REGISTRATION_FAILED"
+  | "OTP_SEND_FAILED"
+  | "OTP_VERIFY_FAILED"
   | "INTERNAL_SERVER_ERROR";
 
 export interface PaginationMeta {

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const { phoneNumber, otp } = validation.data;
     const result = await AuthService.verifyOtp(phoneNumber, otp, ipAddress);
 
-    return ApiResponseHelper.success(result, 200);
+    return ApiResponseHelper.success(result);
   } catch (error: any) {
     console.error("[Verify OTP Error]", error);
     return ApiResponseHelper.error(

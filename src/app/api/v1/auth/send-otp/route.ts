@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const result = await AuthService.requestOtp(validation.data.phoneNumber, ipAddress);
 
-    return ApiResponseHelper.success(result, 200);
+    return ApiResponseHelper.success(result);
   } catch (error: any) {
     console.error("[Send OTP Error]", error);
     return ApiResponseHelper.error(

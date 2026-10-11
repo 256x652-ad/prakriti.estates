@@ -46,7 +46,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const userRoles = user?.roles || [];
+  const userRoles = (user?.roles as string[]) || [];
   const isAdmin = userRoles.includes("ADMIN") || userRoles.includes("SUPER_ADMIN");
 
   return (

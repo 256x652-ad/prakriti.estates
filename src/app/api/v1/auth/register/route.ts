@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
         },
         otp: result.otpResult,
       },
+      undefined,
       201
     );
   } catch (error: any) {
