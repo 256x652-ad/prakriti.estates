@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/infrastructure/database/prisma";
 import { buildRealEstateListingSchema, JsonLd } from "@/lib/seo/structuredData";
 import StayCalendar from "@/components/Stay/StayCalendar";
+import PropertyAuditViewer from "@/components/Consultancy/PropertyAuditViewer";
 
 interface PropertyPageProps {
   params: Promise<{ slug: string }>;
@@ -296,6 +297,14 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
               </p>
               <span className="text-xs text-slate-500">Smart Escrow Token Locking Enabled</span>
             </div>
+          </div>
+
+          {/* Transparency: Structural & Vastu Audit Reports */}
+          <div className="pt-6 border-t border-slate-100">
+            <PropertyAuditViewer
+              propertyId={property.id}
+              isPrakritiCertified={property.isPrakritiCertified}
+            />
           </div>
 
           {/* Interactive Short Stay Hospitality Booking Calendar */}

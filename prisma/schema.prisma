@@ -69,8 +69,10 @@ enum ServiceRequestType {
 
 enum ServiceRequestStatus {
   REQUESTED
+  ASSIGNED
   IN_PROGRESS
   COMPLETED
+  REJECTED
   CANCELLED
 }
 
@@ -149,6 +151,8 @@ model User {
   impersonationsReceived  ImpersonationAuditLog[] @relation("ImpersonatedUser")
   devices                 Device[]
   refreshTokens           RefreshToken[]
+  consultantAssignedServices ServiceRequest[] @relation("ConsultantServiceAssignments")
+  consultantAuditReports    AuditReport[]    @relation("ConsultantReports")
 }
 
 model KycVerification {
@@ -196,6 +200,7 @@ model Property {
   stayReservations   StayReservation[]
   savedBy            SavedProperty[]
   tenancies          Tenancy[]
+  auditReports       AuditReport[]
 
   @@index([location], name: "property_location_idx", type: Gist)
   @@index([boundary], name: "property_boundary_idx", type: Gist)
@@ -320,16 +325,44 @@ model PropertyAudit {
 }
 
 model ServiceRequest {
-  id         String               @id @default(uuid())
-  type       ServiceRequestType
-  status     ServiceRequestStatus @default(REQUESTED)
-  propertyId String
-  property   Property             @relation(fields: [propertyId], references: [id])
-  userId     String
-  user       User                 @relation(fields: [userId], references: [id])
-  notes      String?
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
+  id                    String               @id @default(uuid())
+  type                  ServiceRequestType
+  status                ServiceRequestStatus @default(REQUESTED)
+  propertyId            String
+  property              Property             @relation(fields: [propertyId], references: [id])
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id])
+  assignedConsultantId  String?
+  assignedConsultant    User?                @relation("ConsultantServiceAssignments", fields: [assignedConsultantId], references: [id])
+  notes                 String?
+  auditReport           AuditReport?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([propertyId])
+  @@index([assignedConsultantId, status])
+}
+
+model AuditReport {
+  id               String          @id @default(uuid())
+  serviceRequestId String          @unique
+  serviceRequest   ServiceRequest  @relation(fields: [serviceRequestId], references: [id])
+  propertyId       String
+  property         Property        @relation(fields: [propertyId], references: [id])
+  consultantId     String
+  consultant       User            @relation("ConsultantReports", fields: [consultantId], references: [id])
+  type             AuditType
+  score            Int             // Structural/Vastu compliance score out of 100
+  passed           Boolean         @default(false)
+  findings         String
+  recommendations  String?
+  reportPdfUrl     String?         // Secure S3 URL
+  isPublic         Boolean         @default(false) // Whether seller opted to make report publicly visible
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([propertyId, passed])
+  @@index([consultantId])
 }
 
 model LedgerTransaction {

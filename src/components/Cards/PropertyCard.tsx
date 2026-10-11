@@ -65,9 +65,11 @@ export default function PropertyCard({ property, className = "" }: PropertyCardP
             {property.type}
           </span>
           {property.isPrakritiCertified && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-full shadow-sm backdrop-blur-md">
-              <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500" />
-              Prakriti Certified
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 border border-amber-300 px-3 py-1 rounded-full shadow-md backdrop-blur-md ring-1 ring-amber-200/80">
+              <svg className="w-3.5 h-3.5 fill-amber-900 flex-none" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              <span>Prakriti Certified Gold Pin</span>
             </span>
           )}
         </div>

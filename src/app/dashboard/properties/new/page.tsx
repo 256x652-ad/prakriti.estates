@@ -321,6 +321,23 @@ export default function NewPropertyPage() {
               <p><span className="font-bold text-slate-600">Media Count:</span> {formData.images.length || 1} image(s)</p>
             </div>
 
+            {/* Proactive Pre-Listing Audit Cross-Sell Callout */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✨</span>
+                <h4 className="font-bold text-amber-950 text-sm">Boost Listing Visibility with Prakriti Gold Pin</h4>
+              </div>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Pre-certify this property with a Structural Engineering or Vedic Vastu audit. Certified listings earn the prominent 
+                <span className="font-bold text-amber-800"> Gold Pin</span> on search maps, attracting 3.4x more verified buyers and accelerating token lock time.
+              </p>
+              <div className="pt-1 flex items-center gap-2">
+                <span className="text-[11px] font-bold text-emerald-800 bg-white px-2.5 py-1 rounded-full border border-amber-300">
+                  Pre-Listing Audit Option: Active
+                </span>
+              </div>
+            </div>
+
             <div className="pt-4 flex justify-between">
               <Button variant="outline" onClick={() => setStep(3)}>← Back</Button>
               <Button onClick={handleSubmitListing} isLoading={isLoading}>

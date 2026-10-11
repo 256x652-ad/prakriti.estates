@@ -44,21 +44,28 @@ const PropertyMarker = ({
         </p>
       </div>
 
-      {/* Main Marker Badge */}
-      <div
-        className={`
-        flex items-center justify-center px-2.5 py-1 rounded-full text-white font-bold text-xs shadow-md border border-white/20
-        ${isGoldPin ? "bg-gradient-to-r from-amber-500 to-amber-700 ring-2 ring-amber-300" : modeColor}
-      `}
-      >
-        {isGoldPin && <span className="mr-1">✨</span>}
-        {formatIndianPrice(property.price)}
-      </div>
-
-      {/* Pin Triangle */}
-      <div
-        className={`w-2.5 h-2.5 rotate-45 -mt-1 ${isGoldPin ? "bg-amber-600" : modeColor}`}
-      />
+      {/* Main Marker Badge with Premium Gold Pin Overrides */}
+      {isGoldPin ? (
+        <div className="flex flex-col items-center">
+          <div className="flex items-center gap-1 px-3 py-1 rounded-full text-amber-950 font-extrabold text-xs shadow-lg bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 ring-2 ring-amber-200/90 border border-amber-100 animate-pulse">
+            {/* Premium Gold Pin Crown / Star SVG */}
+            <svg className="w-3.5 h-3.5 fill-amber-950" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            <span>{formatIndianPrice(property.price)}</span>
+          </div>
+          <div className="w-3 h-3 rotate-45 -mt-1.5 bg-gradient-to-br from-amber-400 to-amber-600 border-r border-b border-amber-300 shadow-sm" />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center">
+          <div
+            className={`flex items-center justify-center px-2.5 py-1 rounded-full text-white font-bold text-xs shadow-md border border-white/20 ${modeColor}`}
+          >
+            {formatIndianPrice(property.price)}
+          </div>
+          <div className={`w-2.5 h-2.5 rotate-45 -mt-1 ${modeColor}`} />
+        </div>
+      )}
     </div>
   );
 };
