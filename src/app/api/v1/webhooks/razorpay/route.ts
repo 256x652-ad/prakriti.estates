@@ -29,16 +29,28 @@ export async function POST(req: NextRequest) {
       }
 
       // 3. Financial State Machine, Idempotency Check & Ledger Mutation
-      const settlement = await propertyLockTransactionService.processSuccessfulPayment({
-        orderId,
-        paymentId,
-        amountInPaise: amount,
-        rawPayload: event,
-      });
-
-      console.log(
-        `[Razorpay Webhook] Processed successfully. AlreadyProcessed: ${settlement.alreadyProcessed}, Ledger: ${settlement.ledgerEntryId}`
-      );
+      try {
+        const settlement = await propertyLockTransactionService.processSuccessfulPayment({
+          orderId,
+          paymentId,
+          amountInPaise: amount,
+          rawPayload: event,
+        });
+        console.log(
+          `[Razorpay Webhook] Processed lock payment successfully. AlreadyProcessed: ${settlement.alreadyProcessed}`
+        );
+      } catch (lockErr: any) {
+        // If not a PropertyLock order, check if it's a StayReservation order
+        const { stayBookingService } = await import("@/modules/stays/services/StayBookingService");
+        try {
+          const stayRes = await stayBookingService.confirmStayBooking(orderId, paymentId);
+          console.log(
+            `[Razorpay Webhook] Processed stay reservation successfully. AlreadyConfirmed: ${stayRes.alreadyConfirmed}`
+          );
+        } catch (stayErr) {
+          console.warn("[Razorpay Webhook] Neither PropertyLock nor StayReservation matched order:", orderId);
+        }
+      }
     }
 
     // Always respond 200 OK to acknowledge receipt to gateway

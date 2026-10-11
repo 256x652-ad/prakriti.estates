@@ -230,20 +230,30 @@ model PropertyStayDetails {
   cancellationRule String   // e.g. "Strict", "Flexible"
 }
 
+enum ReservationStatus {
+  PAYMENT_PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
 model StayReservation {
-  id               String   @id @default(uuid())
+  id               String            @id @default(uuid())
   propertyId       String
-  property         Property @relation(fields: [propertyId], references: [id])
+  property         Property          @relation(fields: [propertyId], references: [id])
   userId           String
-  user             User     @relation(fields: [userId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
   checkInDate      DateTime
   checkOutDate     DateTime
   totalAmount      Decimal
-  status           String   @default("CONFIRMED") // CONFIRMED, CANCELLED
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  guestsCount      Int               @default(1)
+  paymentRef       String?           @unique
+  status           ReservationStatus @default(CONFIRMED)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([propertyId, checkInDate, checkOutDate])
+  @@index([userId, status])
 }
 
 model SavedProperty {

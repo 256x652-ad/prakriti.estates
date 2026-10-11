@@ -15,6 +15,8 @@ export type DomainEventType =
   | "CONSULTATION_REQUESTED"
   | "DISPUTE_RAISED"
   | "DISPUTE_RESOLVED"
+  | "STAY_BOOKED"
+  | "STAY_CANCELLED"
   | "LAND_PLOT_RELATED_EVENT";
 
 export interface IDomainEventPayload {

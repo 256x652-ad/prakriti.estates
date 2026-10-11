@@ -3,6 +3,7 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/infrastructure/database/prisma";
 import { buildRealEstateListingSchema, JsonLd } from "@/lib/seo/structuredData";
+import StayCalendar from "@/components/Stay/StayCalendar";
 
 interface PropertyPageProps {
   params: Promise<{ slug: string }>;
@@ -296,6 +297,20 @@ export default async function PropertyPage({ params }: PropertyPageProps) {
               <span className="text-xs text-slate-500">Smart Escrow Token Locking Enabled</span>
             </div>
           </div>
+
+          {/* Interactive Short Stay Hospitality Booking Calendar */}
+          {property.type === "STAY" && (
+            <div className="pt-8 border-t border-slate-100 max-w-xl mx-auto">
+              <h2 className="text-lg font-bold text-slate-900 mb-4 text-center">
+                Check Dates & Reserve Short Stay
+              </h2>
+              <StayCalendar
+                propertyId={property.id}
+                basePrice={Number(property.stayDetails?.dailyRate || property.price)}
+                cancellationPolicy={property.stayDetails?.cancellationRule || "Flexible"}
+              />
+            </div>
+          )}
         </div>
       </article>
     </main>
