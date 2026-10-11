@@ -551,3 +551,38 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
 }
+
+enum AuditActionType {
+  ADMIN_OVERRIDE
+  ADMIN_IMPERSONATION_START
+  ADMIN_IMPERSONATION_END
+  DISPUTE_RESOLUTION
+  PROPERTY_LOCK_FORFEIT
+  KYC_MANUAL_VERIFY
+  KYC_MANUAL_REJECT
+  ESCROW_MANUAL_RELEASE
+  MAINTENANCE_OVERRIDE
+  FEE_CONFIG_MUTATION
+  THEME_UPDATE
+}
+
+model AuditLog {
+  id           String          @id @default(uuid())
+  actorId      String          // User ID of Admin / Actor performing action
+  actorRole    String          @default("ADMIN")
+  actionType   AuditActionType
+  targetEntity String          // e.g. "Property:uuid", "LedgerTransaction:uuid"
+  targetId     String?         // Direct ID of the target resource
+  oldState     Json?           // Snapshot of state before change
+  newState     Json?           // Snapshot of state after change
+  reasonCode   String?         // Required rationale for compliance
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime        @default(now()) // Immutable timestamp
+
+  @@index([actorId])
+  @@index([actionType])
+  @@index([targetEntity])
+  @@index([createdAt])
+}
