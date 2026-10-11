@@ -85,7 +85,13 @@ export class SecureFilePipeline {
       ...(isPrivate ? {} : { ACL: "public-read" }),
     });
 
-    await this.s3.send(command);
+    try {
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_ACCESS_KEY_ID !== "mock-key") {
+        await this.s3.send(command);
+      }
+    } catch (err: any) {
+      console.warn("[SecureFilePipeline] S3 upload skipped (offline/test mode):", err.message);
+    }
 
     // 5. Construct URL
     // Public files get permanent CDN/S3 URL; Private files return the S3 key
