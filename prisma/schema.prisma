@@ -161,8 +161,10 @@ model KycVerification {
 
 model Property {
   id                 String                     @id @default(uuid())
+  slug               String?                    @unique
   title              String
   description        String
+  images             String[]                   @default([])
   type               PropertyType
   lifecycleStatus    LifecycleStatus            @default(DRAFT)
   lockStatus         LockStatus                 @default(AVAILABLE)
