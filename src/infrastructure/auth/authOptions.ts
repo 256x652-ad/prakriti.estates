@@ -11,74 +11,77 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      id: "sms-otp",
+      name: "SMS OTP",
       credentials: {
         phoneNumber: { label: "Phone Number", type: "text" },
-        password: { label: "Password", type: "password" },
-        otp: { label: "OTP (Activation)", type: "text" } // If OTP is required
+        otp: { label: "One-Time Password", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.phoneNumber) throw new Error("Phone number is required");
+        if (!credentials?.phoneNumber) {
+          throw new Error("Phone number is required");
+        }
+        if (!credentials?.otp) {
+          throw new Error("One-time password (OTP) is required");
+        }
 
         const user = await prisma.user.findUnique({
-          where: { phoneNumber: credentials.phoneNumber }
+          where: { phoneNumber: credentials.phoneNumber },
         });
 
         if (!user) {
-          throw new Error("No user found with this phone number");
+          throw new Error("No user registered with this phone number.");
         }
 
-        // Logic for handling OTP verification during account activation
-        if (user.kycStatus === "PENDING" && credentials.otp) {
-          if (user.otpHash && user.otpExpiresAt && user.otpExpiresAt > new Date()) {
-            const isOtpValid = await compare(credentials.otp, user.otpHash);
-            if (!isOtpValid) throw new Error("Invalid OTP");
-            
-            // Mark user as active (or verified)
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { kycStatus: "VERIFIED", otpHash: null, otpExpiresAt: null }
-            });
-            user.kycStatus = "VERIFIED";
-          } else {
-             throw new Error("OTP expired or invalid");
-          }
-        } else if (user.kycStatus === "PENDING") {
-          throw new Error("Account not activated. Please verify OTP.");
+        // Verify OTP against hashed OTP on user record
+        if (!user.otpHash || !user.otpExpiresAt || user.otpExpiresAt <= new Date()) {
+          throw new Error("OTP has expired. Please request a new verification code.");
         }
 
-        // For standard password check (if we added a password hash to the model)
-        // const isPasswordValid = await compare(credentials.password, user.passwordHash!);
-        // if (!isPasswordValid) throw new Error("Invalid password");
+        const isOtpValid = await compare(credentials.otp, user.otpHash);
+        if (!isOtpValid) {
+          throw new Error("Invalid verification code. Please try again.");
+        }
+
+        // Clear one-time hash upon successful authentication
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { otpHash: null, otpExpiresAt: null },
+        });
 
         return {
           id: user.id,
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.phoneNumber,
           phoneNumber: user.phoneNumber,
           roles: user.roles,
+          kycStatus: user.kycStatus,
         };
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // Upon sign in, attach role and id to JWT
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;
+        token.phoneNumber = (user as any).phoneNumber;
+        token.roles = (user as any).roles || ["USER"];
+        token.kycStatus = (user as any).kycStatus || "PENDING";
       }
       return token;
     },
     async session({ session, token }) {
-      // Make token info available in the session object
       if (token && session.user) {
         (session.user as any).id = token.id;
-        (session.user as any).role = token.role as Role;
+        (session.user as any).phoneNumber = token.phoneNumber;
+        (session.user as any).roles = token.roles as Role[];
+        (session.user as any).kycStatus = token.kycStatus;
       }
       return session;
-    }
+    },
   },
   pages: {
-    signIn: '/auth/signin', // Custom signin page
+    signIn: "/login",
+    error: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
