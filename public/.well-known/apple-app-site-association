@@ -1,0 +1,30 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID12345.com.prakritiestates.app",
+        "paths": [
+          "/property/*",
+          "/search*",
+          "/consultants*"
+        ],
+        "components": [
+          {
+            "/": "/property/*",
+            "comment": "Deep link directly into the property details view in Expo"
+          },
+          {
+            "/": "/search*",
+            "comment": "Deep link into the map search view"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID12345.com.prakritiestates.app"
+    ]
+  }
+}

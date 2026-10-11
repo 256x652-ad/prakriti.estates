@@ -70,4 +70,51 @@ export class NotificationService {
 
     await Promise.allSettled(tasks);
   }
+
+  /**
+   * Broadcasts a push notification to all active devices registered for a user.
+   */
+  async broadcastToUserDevices(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (!this.pushProvider) {
+      console.warn("[NotificationService] No push provider configured.");
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // Query active registered devices with a pushToken
+    const devices = await prisma.device.findMany({
+      where: {
+        userId,
+        status: "ACTIVE",
+        pushToken: { not: null },
+      },
+    });
+
+    if (devices.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const results = await Promise.allSettled(
+      devices.map((device) =>
+        this.pushProvider!.sendPushNotification(device.pushToken!, title, body, data)
+      )
+    );
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    results.forEach((r) => {
+      if (r.status === "fulfilled" && r.value) {
+        sentCount++;
+      } else {
+        failedCount++;
+      }
+    });
+
+    return { sentCount, failedCount };
+  }
 }

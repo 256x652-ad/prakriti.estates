@@ -142,6 +142,8 @@ model User {
   tenanciesAsLandlord Tenancy[]         @relation("LandlordRelation")
   impersonationsInitiated ImpersonationAuditLog[] @relation("AdminImpersonator")
   impersonationsReceived  ImpersonationAuditLog[] @relation("ImpersonatedUser")
+  devices                 Device[]
+  refreshTokens           RefreshToken[]
 }
 
 model KycVerification {
@@ -485,4 +487,54 @@ model ImpersonationAuditLog {
   startedAt       DateTime @default(now())
   endedAt         DateTime?
   ipAddress       String?
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+model Device {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     DevicePlatform
+  pushToken    String?        // Expo Push Token or APNS/FCM token
+  deviceId     String         // Hardware UUID / Vendor ID
+  appVersion   String?
+  osVersion    String?
+  deviceModel  String?
+  status       DeviceStatus   @default(ACTIVE)
+  lastActiveAt DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@unique([userId, deviceId])
+  @@index([userId, status])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  tokenHash   String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId    String?
+  device      Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
 }
