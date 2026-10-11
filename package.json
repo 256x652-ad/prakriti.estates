@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
@@ -31,10 +31,10 @@
     "react-map-gl": "^8.1.3",
     "supercluster": "^9.1.0",
     "use-supercluster": "^1.2.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
-    "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/mapbox-gl": "^3.4.1",
     "@types/node": "26.6.5",
