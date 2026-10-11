@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AdvancedSearchService } from "@/modules/properties/services/AdvancedSearchService";
 import { SearchFilterSchema } from "@/modules/properties/core/searchParams";
 import SearchLayoutShell from "@/components/Layout/SearchLayout";
@@ -39,17 +40,34 @@ export default async function SearchPage({
       <div className="space-y-6">
         <p className="text-sm text-gray-500 font-medium">Found {initialProperties.length} results matching your criteria.</p>
         
-        {initialProperties.map((prop: any) => (
-          <div key={prop.id} className="p-4 border bg-white rounded-xl shadow-sm hover:shadow-md transition">
-            <h3 className="font-semibold text-lg text-gray-900">{prop.title || "Beautiful Property"}</h3>
-            <p className="text-prakriti-700 font-bold text-xl mt-1">₹{prop.price}</p>
-            {prop.isPrakritiCertified && (
-              <div className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-gold-600 bg-gold-400/10 px-2 py-1 rounded-md">
-                ✨ Prakriti Certified
+        {initialProperties.map((prop: any) => {
+          const destinationSlug = prop.slug || prop.id;
+          return (
+            <Link
+              key={prop.id}
+              href={`/property/${destinationSlug}`}
+              prefetch={false}
+              className="block p-4 border bg-white rounded-xl shadow-sm hover:shadow-md transition hover:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer group"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-semibold text-lg text-gray-900 group-hover:text-emerald-700 transition">
+                  {prop.title || "Beautiful Property"}
+                </h3>
+                {prop.type && (
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                    {prop.type}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+              <p className="text-emerald-700 font-bold text-xl mt-1">₹{prop.price}</p>
+              {prop.isPrakritiCertified && (
+                <div className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
+                  🌿 Prakriti Certified
+                </div>
+              )}
+            </Link>
+          );
+        })}
 
         <div className="pt-8 border-t">
           <EmiCalculator />
