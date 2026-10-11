@@ -1,43 +1,52 @@
 "use client";
 
 import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  RegisterFormSchema,
+  RegisterFormValues,
+} from "@/modules/auth/schemas/authSchemas";
 
 export default function RegisterPage() {
   const router = useRouter();
-
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    phoneNumber: "+91",
-    email: "",
-    role: "BUYER",
-  });
+  const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(RegisterFormSchema),
+    defaultValues: {
+      role: "BUYER",
+      phoneNumber: "+91",
+    },
+  });
+
+  const onSubmit = async (data: RegisterFormValues) => {
+    setServerError(null);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/v1/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(data),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || "Registration failed");
+      const response = await res.json();
+      if (!res.ok || !response.success) {
+        throw new Error(response.error?.message || "Registration failed");
       }
 
-      // Redirect to login with prefilled phone and callback
-      router.push(`/login?phone=${encodeURIComponent(formData.phoneNumber)}`);
+      // Route to login page with prefilled credentials
+      router.push(`/login?email=${encodeURIComponent(data.email)}`);
     } catch (err: any) {
-      setError(err.message || "Failed to create account");
+      setServerError(err.message || "Failed to register account.");
     } finally {
       setIsLoading(false);
     }
@@ -58,14 +67,14 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {error && (
+        {serverError && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
             <span>⚠️</span>
-            <span>{error}</span>
+            <span>{serverError}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
@@ -73,53 +82,91 @@ export default function RegisterPage() {
               </label>
               <input
                 type="text"
-                required
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                {...register("firstName")}
                 placeholder="Rohit"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
+              {errors.firstName && (
+                <p className="text-xs text-red-500 mt-1">{errors.firstName.message}</p>
+              )}
             </div>
+
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                 Last Name
               </label>
               <input
                 type="text"
-                required
-                value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                {...register("lastName")}
                 placeholder="Sharma"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
+              {errors.lastName && (
+                <p className="text-xs text-red-500 mt-1">{errors.lastName.message}</p>
+              )}
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Mobile Number
+              Email Address
             </label>
             <input
-              type="tel"
-              required
-              value={formData.phoneNumber}
-              onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-              placeholder="+919876543210"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              type="email"
+              {...register("email")}
+              placeholder="rohit@example.com"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+            {errors.email && (
+              <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Email Address (Optional)
+              Mobile Number (E.164)
             </label>
             <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="rohit@example.com"
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              type="tel"
+              {...register("phoneNumber")}
+              placeholder="+919876543210"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+            {errors.phoneNumber && (
+              <p className="text-xs text-red-500 mt-1">{errors.phoneNumber.message}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                {...register("password")}
+                placeholder="••••••••"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              {errors.password && (
+                <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Confirm
+              </label>
+              <input
+                type="password"
+                {...register("confirmPassword")}
+                placeholder="••••••••"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              {errors.confirmPassword && (
+                <p className="text-xs text-red-500 mt-1">{errors.confirmPassword.message}</p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -127,8 +174,7 @@ export default function RegisterPage() {
               Primary Role
             </label>
             <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              {...register("role")}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="BUYER">Buyer / Tenant</option>
@@ -142,7 +188,7 @@ export default function RegisterPage() {
             disabled={isLoading}
             className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20"
           >
-            {isLoading ? "Creating Account..." : "Register & Get OTP"}
+            {isLoading ? "Creating Account..." : "Create Account & Continue →"}
           </button>
         </form>
 

@@ -1,73 +1,111 @@
 "use client";
 
 import React, { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import {
+  LoginFormSchema,
+  LoginFormValues,
+  OtpVerificationSchema,
+  OtpVerificationValues,
+} from "@/modules/auth/schemas/authSchemas";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
-  const [step, setStep] = useState<"PHONE" | "OTP">("PHONE");
-  const [phoneNumber, setPhoneNumber] = useState("+91");
-  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"CREDENTIALS" | "OTP">("CREDENTIALS");
+  const [credentialsPayload, setCredentialsPayload] = useState<LoginFormValues | null>(null);
+  const [maskedPhone, setMaskedPhone] = useState<string>("");
+  const [testOtp, setTestOtp] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [debugOtp, setDebugOtp] = useState<string | null>(null);
 
-  // Step 1: Send OTP
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  // Form 1: Email/Phone & Password
+  const {
+    register: registerLogin,
+    handleSubmit: handleLoginSubmit,
+    formState: { errors: loginErrors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(LoginFormSchema),
+  });
+
+  // Form 2: 6-Digit OTP
+  const {
+    register: registerOtp,
+    handleSubmit: handleOtpSubmit,
+    setValue: setOtpValue,
+    formState: { errors: otpErrors },
+  } = useForm<OtpVerificationValues>({
+    resolver: zodResolver(OtpVerificationSchema),
+  });
+
+  // Step 1: Validate Email/Phone + Password & Trigger SMS OTP
+  const onCredentialsSubmit = async (data: LoginFormValues) => {
+    setServerError(null);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/v1/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber }),
+        body: JSON.stringify(data),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || "Failed to dispatch verification code");
+      const response = await res.json();
+
+      if (!res.ok || !response.success) {
+        throw new Error(response.error?.message || "Invalid credentials provided.");
       }
 
-      if (data.data?.testOtp) {
-        setDebugOtp(data.data.testOtp);
+      setCredentialsPayload(data);
+      setMaskedPhone(response.data?.phoneNumberMasked || "your mobile");
+      if (response.data?.testOtp) {
+        setTestOtp(response.data.testOtp);
+        setOtpValue("otp", response.data.testOtp);
       }
 
       setStep("OTP");
     } catch (err: any) {
-      setError(err.message || "Failed to send code");
+      setServerError(err.message || "Failed to authenticate.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Step 2: Verify & Sign In via NextAuth
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  // Step 2: Finalize 2FA Login via NextAuth Credentials Provider
+  const onOtpVerify = async (data: OtpVerificationValues) => {
+    if (!credentialsPayload) return;
+
+    setServerError(null);
     setIsLoading(true);
 
     try {
-      const result = await signIn("sms-otp", {
-        phoneNumber,
-        otp,
+      const res = await signIn("two-factor-credentials", {
+        emailOrPhone: credentialsPayload.emailOrPhone,
+        password: credentialsPayload.password,
+        otp: data.otp,
         redirect: false,
       });
 
-      if (result?.error) {
-        throw new Error(result.error);
+      if (res?.error) {
+        if (res.error === "INVALID_OTP") {
+          throw new Error("Invalid verification code. Please check and try again.");
+        } else if (res.error === "OTP_EXPIRED") {
+          throw new Error("Verification code expired. Please request a new code.");
+        } else {
+          throw new Error("Authentication failed. Please verify your credentials.");
+        }
       }
 
       router.push(callbackUrl);
       router.refresh();
     } catch (err: any) {
-      setError(err.message || "Verification failed");
+      setServerError(err.message || "Failed to verify code.");
     } finally {
       setIsLoading(false);
     }
@@ -81,99 +119,113 @@ export default function LoginPage() {
             🌿
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-            {step === "PHONE" ? "Sign In to Prakriti" : "Enter Verification Code"}
+            {step === "CREDENTIALS" ? "Sign In to Prakriti" : "Two-Step Verification"}
           </h1>
           <p className="text-sm text-slate-500">
-            {step === "PHONE"
+            {step === "CREDENTIALS"
               ? "Access your dashboard, escrow locks, and verified properties"
-              : `6-digit code sent to ${phoneNumber}`}
+              : `Enter the 6-digit SMS code sent to ${maskedPhone}`}
           </p>
         </div>
 
-        {error && (
+        {serverError && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
             <span>⚠️</span>
-            <span>{error}</span>
+            <span>{serverError}</span>
           </div>
         )}
 
-        {debugOtp && (
+        {testOtp && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
-            <span>Dev/Test OTP:</span>
+            <span>Test / Sandbox OTP:</span>
             <button
               type="button"
-              onClick={() => setOtp(debugOtp)}
+              onClick={() => setOtpValue("otp", testOtp)}
               className="font-mono font-bold underline cursor-pointer"
             >
-              {debugOtp} (Click to fill)
+              {testOtp} (Click to fill)
             </button>
           </div>
         )}
 
-        {step === "PHONE" ? (
-          <form onSubmit={handleSendOtp} className="space-y-4">
+        {step === "CREDENTIALS" ? (
+          <form onSubmit={handleLoginSubmit(onCredentialsSubmit)} className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                Mobile Number
+                Email or Mobile Number
               </label>
               <input
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+919876543210"
-                required
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-slate-800 text-sm"
+                type="text"
+                {...registerLogin("emailOrPhone")}
+                placeholder="aditya@example.com or +919876543210"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               />
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                Include country code (e.g. +91 for India)
-              </span>
+              {loginErrors.emailOrPhone && (
+                <p className="text-xs text-red-500 mt-1">{loginErrors.emailOrPhone.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                {...registerLogin("password")}
+                placeholder="••••••••"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              />
+              {loginErrors.password && (
+                <p className="text-xs text-red-500 mt-1">{loginErrors.password.message}</p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={isLoading || phoneNumber.length < 10}
+              disabled={isLoading}
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20"
             >
-              {isLoading ? "Sending OTP..." : "Get One-Time Password"}
+              {isLoading ? "Authenticating..." : "Continue to SMS OTP →"}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <form onSubmit={handleOtpSubmit(onOtpVerify)} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                6-Digit OTP
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1 text-center">
+                6-Digit Verification Code
               </label>
               <input
                 type="text"
                 maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                {...registerOtp("otp")}
                 placeholder="123456"
-                required
                 autoFocus
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-center tracking-widest font-mono text-2xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
+              {otpErrors.otp && (
+                <p className="text-xs text-red-500 mt-1 text-center">{otpErrors.otp.message}</p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={isLoading || otp.length !== 6}
+              disabled={isLoading}
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20"
             >
-              {isLoading ? "Verifying..." : "Verify & Sign In"}
+              {isLoading ? "Verifying..." : "Verify & Complete Login"}
             </button>
 
             <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
               <button
                 type="button"
-                onClick={() => setStep("PHONE")}
+                onClick={() => setStep("CREDENTIALS")}
                 className="hover:underline text-slate-600"
               >
-                ← Change Number
+                ← Back to Credentials
               </button>
               <button
                 type="button"
-                onClick={handleSendOtp}
+                onClick={() => credentialsPayload && onCredentialsSubmit(credentialsPayload)}
                 className="hover:underline text-emerald-700 font-semibold"
               >
                 Resend Code

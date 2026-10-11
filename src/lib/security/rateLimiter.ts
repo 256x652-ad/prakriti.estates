@@ -8,7 +8,7 @@ export interface RateLimitConfig {
 }
 
 export const RATE_LIMIT_CONFIGS: Record<RateLimitTier, RateLimitConfig> = {
-  AUTH: { maxRequests: 5, windowSeconds: 60 },        // 5 OTP/Login requests per minute
+  AUTH: { maxRequests: 3, windowSeconds: 900 },       // Max 3 OTP requests per 15 minutes
   KYC: { maxRequests: 3, windowSeconds: 300 },        // 3 KYC submissions per 5 minutes
   PAYMENTS: { maxRequests: 60, windowSeconds: 60 },    // 60 webhooks per minute
   UPLOADS: { maxRequests: 10, windowSeconds: 60 },     // 10 uploads per minute

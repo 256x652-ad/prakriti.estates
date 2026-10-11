@@ -120,6 +120,8 @@ enum LedgerEventCode {
 model User {
   id              String    @id @default(uuid())
   phoneNumber     String    @unique
+  email           String?   @unique
+  passwordHash    String?
   roles           Role[]    @default([USER])
   kycStatus       KycStatus @default(PENDING)
   otpHash         String?
@@ -577,6 +579,8 @@ enum AuditActionType {
   THEME_UPDATE
   FEATURE_FLAG_TOGGLE
   GLOBAL_SETTING_MUTATION
+  USER_LOGIN_SUCCESS
+  USER_LOGIN_FAILED
 }
 
 model AuditLog {
