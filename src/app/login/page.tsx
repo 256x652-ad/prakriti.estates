@@ -1,47 +1,42 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  LoginFormSchema,
-  LoginFormValues,
-} from "@/modules/auth/schemas/authSchemas";
 
 function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
+  const [emailOrPhone, setEmailOrPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Email/Phone & Password Form
-  const {
-    register: registerLogin,
-    handleSubmit: handleLoginSubmit,
-    formState: { errors: loginErrors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(LoginFormSchema),
-  });
-
-  // Direct Email/Phone + Password Login
-  const onCredentialsSubmit = async (data: LoginFormValues) => {
+  // Direct Form Submit with explicit preventDefault
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setServerError(null);
+
+    const trimmedInput = emailOrPhone.trim();
+    if (!trimmedInput || !password) {
+      setServerError("Please enter both your email/phone and password.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const res = await signIn("two-factor-credentials", {
-        emailOrPhone: data.emailOrPhone,
-        password: data.password,
+        emailOrPhone: trimmedInput,
+        password: password,
         redirect: false,
       });
 
-      if (res?.error) {
-        throw new Error(res.error === "CredentialsSignin" ? "Invalid email/phone or password." : res.error);
+      if (!res || res.error) {
+        throw new Error("Invalid email/phone or password. Please verify and try again.");
       }
 
       // Check session to route Admin vs Regular user accurately
@@ -51,8 +46,8 @@ function LoginFormContent() {
         const roles = session?.user?.roles || [];
         const isAdmin =
           roles.includes("ADMIN") ||
-          data.emailOrPhone.toLowerCase().includes("admin") ||
-          data.emailOrPhone.includes("9999999999");
+          trimmedInput.toLowerCase().includes("admin") ||
+          trimmedInput.includes("9999999999");
 
         const target = isAdmin
           ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
@@ -64,7 +59,6 @@ function LoginFormContent() {
       }
     } catch (err: any) {
       setServerError(err.message || "Failed to authenticate.");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -91,20 +85,20 @@ function LoginFormContent() {
           </div>
         )}
 
-        <form onSubmit={handleLoginSubmit(onCredentialsSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit} method="POST" action="#" className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
               Email or Mobile Number
             </label>
             <input
               type="text"
-              {...registerLogin("emailOrPhone")}
+              name="emailOrPhone"
+              value={emailOrPhone}
+              onChange={(e) => setEmailOrPhone(e.target.value)}
               placeholder="admin@prakritiestates.com or 9999999999"
+              required
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
-            {loginErrors.emailOrPhone && (
-              <p className="text-xs text-red-500 mt-1">{loginErrors.emailOrPhone.message}</p>
-            )}
           </div>
 
           <div>
@@ -118,13 +112,13 @@ function LoginFormContent() {
             </div>
             <input
               type="password"
-              {...registerLogin("password")}
+              name="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              required
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
-            {loginErrors.password && (
-              <p className="text-xs text-red-500 mt-1">{loginErrors.password.message}</p>
-            )}
           </div>
 
           <button
