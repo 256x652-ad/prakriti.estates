@@ -1,4 +1,8 @@
-import { propertySearchService, SearchQueryFilters, SearchResultItem } from "@/modules/properties/services/PropertySearchService";
+import {
+  propertySearchService,
+  SearchQueryFilters,
+  SearchResultItem,
+} from "@/modules/properties/services/PropertySearchService";
 import { SearchFilterSchema } from "@/modules/properties/core/searchParams";
 import SearchLayoutShell from "@/components/Layout/SearchLayout";
 import EmiCalculator from "@/components/Calculators/EmiCalculator";
@@ -12,14 +16,27 @@ export default async function SearchPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const resolvedParams = await searchParams;
+
+  // Normalize aliases from URL (mode -> type, query -> q, certifiedOnly -> isPrakritiCertified)
+  const normalizedType =
+    resolvedParams.type || resolvedParams.mode;
+  const normalizedQuery =
+    resolvedParams.q || resolvedParams.query;
+  const normalizedCertified =
+    resolvedParams.isPrakritiCertified !== undefined
+      ? resolvedParams.isPrakritiCertified
+      : resolvedParams.certifiedOnly !== undefined
+      ? resolvedParams.certifiedOnly
+      : undefined;
+
   const rawParams = {
-    type: resolvedParams.type,
+    type: typeof normalizedType === "string" ? normalizedType.toUpperCase() : undefined,
     minPrice: resolvedParams.minPrice,
     maxPrice: resolvedParams.maxPrice,
-    isPrakritiCertified: resolvedParams.isPrakritiCertified,
+    isPrakritiCertified: normalizedCertified,
     bounds: resolvedParams.bounds,
     radius: resolvedParams.radius,
-    q: resolvedParams.q,
+    q: typeof normalizedQuery === "string" ? normalizedQuery : undefined,
   };
 
   const parsedFilters = SearchFilterSchema.parse(rawParams);
@@ -29,7 +46,7 @@ export default async function SearchPage({
 
   try {
     const filters: SearchQueryFilters = {
-      type: parsedFilters.type,
+      type: parsedFilters.type as any,
       minPrice: parsedFilters.minPrice,
       maxPrice: parsedFilters.maxPrice,
       isPrakritiCertified: parsedFilters.isPrakritiCertified,
@@ -43,7 +60,7 @@ export default async function SearchPage({
     properties = result.items;
     totalCount = result.total;
 
-    // If database is reachable but has zero published properties, populate with mock Prisma domain data for seamless discovery
+    // Gracefully fallback to mock data only if zero items match
     if (properties.length === 0) {
       let mockData = getMockSearchResults();
       if (parsedFilters.type) {
@@ -71,7 +88,7 @@ export default async function SearchPage({
     }
   } catch (error) {
     console.warn(
-      "[SearchPage] Database query unreachable or PostGIS error, failing over gracefully to type-safe domain mocks:",
+      "[SearchPage] Database query or PostGIS error, failing over gracefully to type-safe domain mocks:",
       error
     );
     let mockData = getMockSearchResults();
@@ -104,23 +121,26 @@ export default async function SearchPage({
       mapComponent={<PropertyMap initialProperties={properties} />}
     >
       <div className="space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-border">
-          <p className="text-sm font-medium text-muted-foreground">
-            Showing <span className="font-bold text-foreground">{properties.length}</span>{" "}
-            {properties.length === 1 ? "property" : "properties"}
+        {/* Results Counter & Active Category */}
+        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+          <p className="text-xs font-semibold text-slate-500">
+            Showing <span className="font-extrabold text-slate-900">{properties.length}</span>{" "}
+            {properties.length === 1 ? "listing" : "listings"} in viewport
           </p>
           {parsedFilters.type && (
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
               {parsedFilters.type}
             </span>
           )}
         </div>
 
+        {/* Listings List */}
         {properties.length === 0 ? (
-          <div className="py-12 text-center space-y-3">
-            <p className="text-base font-semibold text-foreground">No properties found</p>
-            <p className="text-sm text-muted-foreground">
-              Try expanding your map viewport or adjusting your filters.
+          <div className="py-16 text-center space-y-2">
+            <span className="text-3xl block">🔍</span>
+            <p className="text-sm font-bold text-slate-800">No properties found</p>
+            <p className="text-xs text-slate-400">
+              Try panning the map or clearing your search filters above.
             </p>
           </div>
         ) : (
@@ -131,7 +151,8 @@ export default async function SearchPage({
           </div>
         )}
 
-        <div className="pt-8 border-t border-border">
+        {/* EMI Calculator Widget */}
+        <div className="pt-6 border-t border-slate-200">
           <EmiCalculator />
         </div>
       </div>
