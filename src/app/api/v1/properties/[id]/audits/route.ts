@@ -7,7 +7,7 @@ import { ApiResponseHelper } from "@/lib/api/response";
 
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ propertyId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,7 +15,7 @@ export async function GET(
     const userRoles = session?.user ? (session.user as any).roles || [] : [];
     const isAdmin = userRoles.includes("ADMIN") || userRoles.includes("SUPER_ADMIN");
 
-    const { propertyId } = await context.params;
+    const { id: propertyId } = await context.params;
 
     const property = await prisma.property.findUnique({
       where: { id: propertyId },
