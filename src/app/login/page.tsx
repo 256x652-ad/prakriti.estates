@@ -1,71 +1,69 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  LoginFormSchema,
-  LoginFormValues,
-} from "@/modules/auth/schemas/authSchemas";
 
 function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const initialEmail = searchParams.get("emailOrPhone") || "";
 
+  const [emailOrPhone, setEmailOrPhone] = useState(initialEmail);
+  const [password, setPassword] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Email/Phone & Password Form
-  const {
-    register: registerLogin,
-    handleSubmit: handleLoginSubmit,
-    formState: { errors: loginErrors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(LoginFormSchema),
-  });
-
-  // Direct Email/Phone + Password Login
-  const onCredentialsSubmit = async (data: LoginFormValues) => {
+  const handleLogin = async () => {
     setServerError(null);
+
+    const trimmedInput = emailOrPhone.trim();
+    if (!trimmedInput) {
+      setServerError("Please enter your email or 10-digit mobile number.");
+      return;
+    }
+    if (!password) {
+      setServerError("Please enter your password.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const res = await signIn("two-factor-credentials", {
-        emailOrPhone: data.emailOrPhone,
-        password: data.password,
+        emailOrPhone: trimmedInput,
+        password: password,
         redirect: false,
       });
 
-      if (res?.error) {
-        throw new Error(res.error === "CredentialsSignin" ? "Invalid email/phone or password." : res.error);
+      if (!res || res.error) {
+        setServerError("Invalid email/phone or password. Please check your credentials.");
+        setIsLoading(false);
+        return;
       }
 
-      // Check session to route Admin vs Regular user accurately
-      try {
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
-        const roles = session?.user?.roles || [];
-        const isAdmin =
-          roles.includes("ADMIN") ||
-          data.emailOrPhone.toLowerCase().includes("admin") ||
-          data.emailOrPhone.includes("9999999999");
+      // Check destination: Admin vs Regular user
+      const isUserAdmin =
+        trimmedInput.toLowerCase().includes("admin") ||
+        trimmedInput.includes("9999999999");
 
-        const target = isAdmin
-          ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
-          : callbackUrl;
+      const destination = isUserAdmin
+        ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
+        : callbackUrl;
 
-        window.location.href = target;
-      } catch {
-        window.location.href = callbackUrl !== "/dashboard" ? callbackUrl : "/admin";
-      }
+      window.location.href = destination;
     } catch (err: any) {
-      setServerError(err.message || "Failed to authenticate.");
-    } finally {
+      setServerError(err.message || "An unexpected error occurred during sign-in.");
       setIsLoading(false);
+    }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleLogin();
     }
   };
 
@@ -91,20 +89,20 @@ function LoginFormContent() {
           </div>
         )}
 
-        <form onSubmit={handleLoginSubmit(onCredentialsSubmit)} className="space-y-4">
+        <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
               Email or Mobile Number
             </label>
             <input
               type="text"
-              {...registerLogin("emailOrPhone")}
+              autoComplete="username"
+              value={emailOrPhone}
+              onChange={(e) => setEmailOrPhone(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder="admin@prakritiestates.com or 9999999999"
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
-            {loginErrors.emailOrPhone && (
-              <p className="text-xs text-red-500 mt-1">{loginErrors.emailOrPhone.message}</p>
-            )}
           </div>
 
           <div>
@@ -118,23 +116,24 @@ function LoginFormContent() {
             </div>
             <input
               type="password"
-              {...registerLogin("password")}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder="••••••••"
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
-            {loginErrors.password && (
-              <p className="text-xs text-red-500 mt-1">{loginErrors.password.message}</p>
-            )}
           </div>
 
           <button
-            type="submit"
+            type="button"
+            onClick={handleLogin}
             disabled={isLoading}
             className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 cursor-pointer"
           >
             {isLoading ? "Signing in..." : "Sign In to Account →"}
           </button>
-        </form>
+        </div>
 
         <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
           New to Prakriti?{" "}

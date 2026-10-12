@@ -185,6 +185,23 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const urlObj = new URL(url);
+        const baseObj = new URL(baseUrl);
+        if (urlObj.origin === baseObj.origin) return url;
+        if (
+          urlObj.hostname === "localhost" ||
+          urlObj.hostname === "127.0.0.1" ||
+          urlObj.hostname.startsWith("192.168.") ||
+          urlObj.hostname.startsWith("10.")
+        ) {
+          return url;
+        }
+      } catch {}
+      return baseUrl;
+    },
   },
   pages: {
     signIn: "/login",
