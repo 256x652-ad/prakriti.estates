@@ -41,14 +41,26 @@ function LoginFormContent() {
       });
 
       if (res?.error) {
-        throw new Error("Invalid email/phone or password.");
+        throw new Error(res.error === "CredentialsSignin" ? "Invalid email/phone or password." : res.error);
       }
 
-      // Route admin users directly to /admin
-      if (data.emailOrPhone.toLowerCase().includes("admin") || callbackUrl.includes("/admin")) {
-        router.push(callbackUrl !== "/dashboard" ? callbackUrl : "/admin");
-      } else {
-        router.push(callbackUrl);
+      // Check session to route Admin vs Regular user accurately
+      try {
+        const sessionRes = await fetch("/api/auth/session");
+        const session = await sessionRes.json();
+        const roles = session?.user?.roles || [];
+        const isAdmin =
+          roles.includes("ADMIN") ||
+          data.emailOrPhone.toLowerCase().includes("admin") ||
+          data.emailOrPhone.includes("9999999999");
+
+        const target = isAdmin
+          ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
+          : callbackUrl;
+
+        window.location.href = target;
+      } catch {
+        window.location.href = callbackUrl !== "/dashboard" ? callbackUrl : "/admin";
       }
     } catch (err: any) {
       setServerError(err.message || "Failed to authenticate.");
