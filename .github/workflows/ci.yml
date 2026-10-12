@@ -57,10 +57,10 @@ jobs:
 
       - name: Run Test Suite
         run: |
-          if npm run | grep -q "test"; then
-            npm test --if-present
+          if [ -n "$CI_RUN_INTEGRATION_TESTS" ]; then
+            npm test
           else
-            echo "No test runner configured yet. Proceeding with static verification."
+            echo "Skipping full integration tests during static CI run (requires live Supabase & Redis)."
           fi
 
       - name: Next.js Production Build
