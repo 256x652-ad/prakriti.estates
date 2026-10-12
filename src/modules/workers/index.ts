@@ -3,6 +3,7 @@ import { domainEventConsumer } from "../notifications/workers/DomainEventConsume
 import { lockExpirationWorker } from "../workflows/workers/LockExpirationWorker";
 import { monthlyInvoicingWorker } from "../rentals/workers/MonthlyInvoicingWorker";
 import { propertyPublishedConsumer } from "../search/workers/PropertyPublishedConsumer";
+import { platformHealthReportWorker } from "../analytics/workers/PlatformHealthReportWorker";
 
 export {
   transactionalOutboxRelay,
@@ -10,6 +11,7 @@ export {
   lockExpirationWorker,
   monthlyInvoicingWorker,
   propertyPublishedConsumer,
+  platformHealthReportWorker,
 };
 
 /**
@@ -29,6 +31,9 @@ export function initializePlatformWorkers() {
 
   // 4. Start Monthly Invoicing Worker and schedule repeatable cron
   monthlyInvoicingWorker.getWorker();
+
+  // 5. Start Daily Platform Health & Anomaly Reporting Worker
+  platformHealthReportWorker.startScheduledWorker();
 
   console.log("[WorkerBootstrap] All background workers successfully initialized.");
 }

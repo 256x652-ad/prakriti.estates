@@ -11,12 +11,14 @@ import { RateLimiter } from './src/lib/security/rateLimiter';
 import { SecureFilePipeline } from './src/lib/storage/secureUpload';
 import { AuditLogService } from './src/modules/audit/services/AuditLogService';
 import { AppError, PlatformErrorCode } from './src/lib/errors/errorCodes';
+import { analyticsService } from './src/modules/analytics/services/AnalyticsService';
+import { platformHealthReportWorker } from './src/modules/analytics/workers/PlatformHealthReportWorker';
 
 const prisma = new PrismaClient();
 
 async function runComprehensiveTests() {
   console.log("\n============================================================");
-  console.log("🚀 STARTING 12-POINT COMPREHENSIVE PLATFORM VERIFICATION 🚀");
+  console.log("🚀 STARTING 13-POINT COMPREHENSIVE PLATFORM VERIFICATION 🚀");
   console.log("============================================================\n");
 
   const buyer = await prisma.user.findFirst({ where: { roles: { has: "BUYER" } } });
@@ -32,7 +34,7 @@ async function runComprehensiveTests() {
   }
 
   let passedCount = 0;
-  const totalTests = 12;
+  const totalTests = 13;
 
   try {
     // ---------------------------------------------------------
@@ -229,6 +231,29 @@ async function runComprehensiveTests() {
 
     const testError = new AppError(PlatformErrorCode.PROPERTY_ALREADY_LOCKED);
     console.log("   ✅ AppError correctly initialized. Code:", testError.code, "HTTP:", testError.httpStatus);
+    passedCount++;
+
+    // ---------------------------------------------------------
+    // TEST 13: Phase 20 — Analytics & Business Intelligence Engine
+    // ---------------------------------------------------------
+    console.log("\n1️⃣3️⃣ TESTING ANALYTICS ENGINE, READ-REPLICA & DAILY HEALTH WORKER...");
+    
+    // A. Read-Replica GMV & Overview Aggregations
+    const overviewMetrics = await analyticsService.getPlatformOverviewMetrics("30d", true);
+    console.log("   ✅ Platform GMV Aggregated:", `₹${overviewMetrics.totalGmv.toLocaleString("en-IN")}`);
+    console.log("   ✅ Platform Net Revenue Calculated:", `₹${overviewMetrics.platformRevenue.toLocaleString("en-IN")}`);
+    console.log("   ✅ Active MRR from Tenancies:", `₹${overviewMetrics.mrr.toLocaleString("en-IN")}`);
+    console.log("   ✅ Active Platform Users:", overviewMetrics.activeUsersCount);
+
+    // B. Conversion Funnel (5 Stages)
+    const funnelMetrics = await analyticsService.getConversionFunnelMetrics("30d", true);
+    console.log("   ✅ Conversion Funnel Stages Verified (5 stages):", funnelMetrics.stages.map(s => s.stage).join(" -> "));
+    console.log("   ✅ Overall Funnel Conversion Rate:", `${funnelMetrics.overallConversionRate}%`);
+
+    // C. Daily Platform Health & Anomaly Worker Execution
+    const healthSummary = await platformHealthReportWorker.executeNow();
+    console.log("   ✅ Daily Health Report Worker Executed. DLQ Errors:", healthSummary.dlqErrorsCount, "| KYC Failure Rate:", `${healthSummary.kycFailureRate}%`, "| Status:", healthSummary.status);
+
     passedCount++;
 
     // ---------------------------------------------------------

@@ -28,6 +28,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             📊 Overview Dashboard
           </Link>
           <Link
+            href="/admin/analytics"
+            className="block px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
+          >
+            📈 Analytics & BI
+          </Link>
+          <Link
             href="/admin/properties"
             className="block px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition"
           >

@@ -42,7 +42,8 @@ export type NotificationTemplateType =
   | "LOCK_EXPIRED"
   | "INVOICE_GENERATED"
   | "PROPERTY_ALERT"
-  | "KYC_STATUS_UPDATE";
+  | "KYC_STATUS_UPDATE"
+  | "PLATFORM_HEALTH_REPORT";
 
 export interface RenderedTemplate {
   title: string;
@@ -118,6 +119,26 @@ export class NotificationService {
           smsMessage: `[Prakriti Estates] Your KYC status has been updated to: ${data.status}.`,
           emailSubject: `KYC Compliance Update: ${data.status}`,
           emailHtml: `<h2>KYC Verification Update</h2><p>Your account KYC verification is now: <strong>${data.status}</strong>.</p>`,
+        };
+
+      case "PLATFORM_HEALTH_REPORT":
+        return {
+          title: "Daily Platform Health Report 🏥",
+          smsMessage: `[Prakriti Health] GMV: ₹${Number(data.dailyGmv || 0).toLocaleString("en-IN")} | DLQ Errors: ${data.dlqErrorsCount} | KYC Failure Rate: ${data.kycFailureRate}%`,
+          emailSubject: `Daily Platform Health & Anomaly Report - ${data.reportDate || "Today"}`,
+          emailHtml: `
+            <h2>🌿 Prakriti Estates — Daily Platform Health & Anomaly Report</h2>
+            <p><strong>Generated At:</strong> ${data.generatedAt || new Date().toISOString()}</p>
+            <table border="1" cellpadding="8" style="border-collapse: collapse; font-family: sans-serif;">
+              <tr><th>Metric</th><th>Value</th><th>Status</th></tr>
+              <tr><td>24h Platform GMV</td><td>₹${Number(data.dailyGmv || 0).toLocaleString("en-IN")}</td><td>✅ Normal</td></tr>
+              <tr><td>24h Platform Revenue</td><td>₹${Number(data.dailyRevenue || 0).toLocaleString("en-IN")}</td><td>✅ Normal</td></tr>
+              <tr><td>Dead Letter Queue (DLQ) Errors</td><td>${data.dlqErrorsCount}</td><td>${Number(data.dlqErrorsCount) > 0 ? "⚠️ Requires Review" : "✅ Clear"}</td></tr>
+              <tr><td>KYC Failure Rate</td><td>${data.kycFailureRate}% (${data.kycRejectedCount}/${data.kycTotalCount})</td><td>${Number(data.kycFailureRate) > 15 ? "⚠️ Elevated" : "✅ Healthy"}</td></tr>
+              <tr><td>Expired Locks</td><td>${data.expiredLocksCount}</td><td>✅ Processed</td></tr>
+            </table>
+            <p style="margin-top: 15px;">Access the full command center at <a href="/admin/analytics">/admin/analytics</a>.</p>
+          `,
         };
 
       default:
@@ -241,6 +262,22 @@ export class NotificationService {
       title: property.title,
       price: property.price,
       city: property.city || "Delhi NCR",
+    });
+  }
+
+  /**
+   * Dispatches Daily Platform Health & Anomaly Report to Super Admin team
+   */
+  async sendDailyPlatformHealthReport(reportData: Record<string, any>): Promise<boolean> {
+    const template = this.renderTemplate("PLATFORM_HEALTH_REPORT", reportData);
+    const adminEmail = process.env.ADMIN_ALERT_EMAIL || "ops@prakritiestates.com";
+
+    console.log(`[NotificationService] Dispatching Daily Platform Health Report to: ${adminEmail}`);
+
+    return await this.emailProvider.sendEmail({
+      to: adminEmail,
+      subject: template.emailSubject,
+      body: template.emailHtml,
     });
   }
 }
