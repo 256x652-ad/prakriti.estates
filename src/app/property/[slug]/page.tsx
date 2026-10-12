@@ -10,61 +10,36 @@ interface PropertyPageProps {
   params: Promise<{ slug: string }>;
 }
 
-// ISR configuration: Revalidate cached pages every 60 seconds
-export const revalidate = 60;
-
-// Enable dynamic params so newly created properties can be rendered on-demand & cached
-export const dynamicParams = true;
-
-/**
- * Pre-render top active properties at build time for instant TTFB
- */
-export async function generateStaticParams() {
-  try {
-    const properties = await prisma.property.findMany({
-      where: {
-        lifecycleStatus: "PUBLISHED",
-      },
-      select: {
-        slug: true,
-        id: true,
-      },
-      take: 50,
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    return properties.map((prop) => ({
-      slug: prop.slug || prop.id,
-    }));
-  } catch (error) {
-    console.error("generateStaticParams error:", error);
-    return [];
-  }
-}
+// Dynamic on-demand rendering ensures real-time inventory and lock status
+// without exhausting database connection pools during Next.js build export.
+export const dynamic = "force-dynamic";
 
 /**
  * Helper to fetch property by slug or id with relations
  */
 async function getProperty(slugOrId: string) {
-  return await prisma.property.findFirst({
-    where: {
-      OR: [{ slug: slugOrId }, { id: slugOrId }],
-    },
-    include: {
-      buyDetails: true,
-      rentDetails: true,
-      stayDetails: true,
-      owner: {
-        select: {
-          firstName: true,
-          lastName: true,
-          phoneNumber: true,
+  try {
+    return await prisma.property.findFirst({
+      where: {
+        OR: [{ slug: slugOrId }, { id: slugOrId }],
+      },
+      include: {
+        buyDetails: true,
+        rentDetails: true,
+        stayDetails: true,
+        owner: {
+          select: {
+            firstName: true,
+            lastName: true,
+            phoneNumber: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (error: any) {
+    console.error("[PropertyPage] Database lookup error:", error.message);
+    return null;
+  }
 }
 
 /**
