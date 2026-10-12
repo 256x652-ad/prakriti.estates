@@ -82,7 +82,7 @@ jobs:
         run: npx prisma db push --accept-data-loss
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
 
       # Option A: Deploy to Vercel (Default for Next.js)
       - name: Deploy to Vercel
