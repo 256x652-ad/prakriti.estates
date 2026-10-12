@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.prakritiestates.app",
+      "sha256_cert_fingerprints": [
+        "14:6D:E9:7F:0F:52:CC:45:25:4E:69:A2:1E:5F:68:D0:55:09:E0:F6:A5:4E:A4:37:C0:00:8F:61:01:85:23:21"
+      ]
+    }
+  }
+]

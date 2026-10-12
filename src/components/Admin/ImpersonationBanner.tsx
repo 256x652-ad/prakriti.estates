@@ -1,52 +1,48 @@
 "use client";
 
 import React from "react";
-// import { useSession, update } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { stopImpersonationAction } from "@/modules/admin/actions/impersonationActions";
 
-/**
- * Global component rendered in the RootLayout.
- * It constantly monitors the session object. If `impersonatorId` exists,
- * it forces a red, un-dismissible banner across the entire application to prevent
- * the Admin from forgetting they are acting on behalf of a user.
- */
 export default function ImpersonationBanner() {
-  // MOCKING SESSION HOOK FOR DEMONSTRATION
-  // const { data: session } = useSession();
-  const session = {
-    user: {
-      id: "user_123",
-      impersonatorId: "admin_999" // Assuming an active impersonation
-    }
-  };
+  const { data: session, update } = useSession();
 
-  if (!session?.user?.impersonatorId) {
+  const user = session?.user as any;
+  const impersonatorId = user?.impersonatorId;
+
+  if (!impersonatorId) {
     return null; // Normal operation, hide banner.
   }
 
   const handleRevert = async () => {
-    // Await NextAuth update to revert the token
-    // await update({ revertImpersonation: true });
-    console.log("Reverting back to Admin Identity...");
-    alert("Reverting to Admin...");
+    try {
+      await stopImpersonationAction(user.id);
+      await update({ revertImpersonation: true });
+      window.location.href = "/admin/users";
+    } catch (e) {
+      console.error("Revert failed", e);
+    }
   };
 
   return (
-    <div className="fixed top-0 left-0 w-full z-50 bg-red-600 text-white px-4 py-2 shadow-lg flex items-center justify-between">
+    <div className="fixed top-0 left-0 w-full z-50 bg-red-600 text-white px-4 py-2 shadow-2xl flex items-center justify-between border-b-2 border-red-800">
       <div className="flex items-center space-x-3">
         <span className="text-xl animate-pulse">⚠️</span>
         <div>
-          <p className="font-bold text-sm">SECURITY WARNING: ACTIVE IMPERSONATION SESSION</p>
-          <p className="text-xs text-red-100">
-            You are currently viewing and acting as User <span className="font-mono bg-red-800 px-1 rounded">{session.user.id}</span>.
-            All actions are being audited.
+          <p className="font-bold text-xs uppercase tracking-wider">
+            SECURITY WARNING: ACTIVE SUPER ADMIN IMPERSONATION SESSION
+          </p>
+          <p className="text-[11px] text-red-100">
+            You are acting as User <span className="font-mono bg-red-900/90 px-1.5 py-0.5 rounded font-bold">{user.id}</span>.
+            All mutations are heavily audited under Admin ID <span className="font-mono">{impersonatorId}</span>.
           </p>
         </div>
       </div>
-      <button 
+      <button
         onClick={handleRevert}
-        className="bg-white text-red-700 hover:bg-red-50 font-bold py-1.5 px-4 rounded text-sm transition-colors shadow"
+        className="bg-white hover:bg-red-50 text-red-700 font-extrabold py-1 px-3.5 rounded-lg text-xs transition-colors shadow-md cursor-pointer"
       >
-        Revert to Admin
+        Revert to Super Admin
       </button>
     </div>
   );

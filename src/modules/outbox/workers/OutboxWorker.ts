@@ -50,7 +50,10 @@ export class OutboxWorker {
         case "LAND_PLOT_RELATED_EVENT":
           await this.handleLandPlotCrossSell(event.payload);
           break;
-        // Add more event types here...
+        case "PROPERTY_LOCKED":
+        case "PAYMENT_SUCCESS":
+          await this.handlePaymentAndLockNotifications(event.eventType, event.payload);
+          break;
         default:
           console.log(`[OutboxWorker] No handler for event type: ${event.eventType}`);
       }
@@ -91,6 +94,30 @@ export class OutboxWorker {
     // If the email API goes down, this throws an error, the BullMQ job fails,
     // and the event remains PENDING/FAILED in the outbox table for a safe retry.
     
+    return true;
+  }
+
+  /**
+   * DOMAIN HANDLER: Token Payment & Property Lock Notifications
+   * Sends Token Receipt (SMS/Email) to the Buyer and Property Locked alert to the Seller.
+   */
+  private async handlePaymentAndLockNotifications(eventType: string, payload: any) {
+    const { buyerId, sellerId, propertyId, amount, paymentId, lockedUntil } = payload;
+
+    // 1. Send Token Receipt to Buyer
+    if (buyerId) {
+      console.log(`[Notification Service] Dispatching Token Receipt to Buyer ${buyerId}...`);
+      console.log(`   Receipt Ref: ${paymentId} | Amount: ₹${amount} | Locked Until: ${lockedUntil}`);
+      // await notificationService.sendTransactionalSms(buyerId, "TOKEN_RECEIPT_SMS", { amount, paymentId });
+    }
+
+    // 2. Send Property Locked Alert to Seller
+    if (sellerId) {
+      console.log(`[Notification Service] Dispatching Token Lock Alert to Seller ${sellerId}...`);
+      console.log(`   Property: ${propertyId} | Status: Temporarily Locked for Escrow Finalization.`);
+      // await notificationService.sendPropertyAlert(sellerId, propertyId);
+    }
+
     return true;
   }
 }

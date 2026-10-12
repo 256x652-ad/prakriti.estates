@@ -7,6 +7,11 @@ async function main() {
   console.log('Seeding Database for Prakriti Estates...');
 
   // 1. Clean Database (Optional for dev)
+  await prisma.auditLog.deleteMany();
+  await prisma.impersonationAuditLog.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.device.deleteMany();
+  await prisma.propertyAudit.deleteMany();
   await prisma.outboxEvent.deleteMany();
   await prisma.financialLedgerEntry.deleteMany();
   await prisma.ledgerTransaction.deleteMany();

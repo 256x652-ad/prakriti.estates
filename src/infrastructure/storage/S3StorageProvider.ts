@@ -1,82 +1,62 @@
-import { IStorageProvider } from "@/core/providers/IStorageProvider";
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import crypto from "crypto";
 
-export class S3StorageProvider implements IStorageProvider {
+export interface PresignedUploadResult {
+  uploadUrl: string;
+  publicUrl: string;
+  fileKey: string;
+  expiresInSeconds: number;
+}
+
+export class S3StorageProvider {
   private client: S3Client;
-  private publicBucket: string;
-  private privateBucket: string;
+  private bucket: string;
+  private region: string;
 
   constructor() {
+    this.region = process.env.AWS_REGION || "ap-south-1";
+    this.bucket = process.env.AWS_S3_PUBLIC_BUCKET || "prakriti-estates-public";
     this.client = new S3Client({
-      region: process.env.AWS_REGION!,
+      region: this.region,
       credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "MOCK_KEY",
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "MOCK_SECRET",
       },
     });
-    this.publicBucket = process.env.AWS_S3_PUBLIC_BUCKET!;
-    this.privateBucket = process.env.AWS_S3_PRIVATE_BUCKET!;
   }
 
-  private getBucketForPath(path: string): string {
-    // Determine bucket based on prefix. 
-    // e.g. "kyc/doc.pdf" -> private, "properties/img.jpg" -> public
-    return path.startsWith("private/") ? this.privateBucket : this.publicBucket;
-  }
+  /**
+   * Generates a pre-signed S3 URL for secure direct uploads from browser/mobile clients
+   */
+  async generatePresignedUploadUrl(params: {
+    fileName: string;
+    contentType: string;
+    folder?: string;
+    expiresIn?: number;
+  }): Promise<PresignedUploadResult> {
+    const folder = params.folder || "properties";
+    const extension = params.fileName.split(".").pop() || "jpg";
+    const secureId = crypto.randomUUID();
+    const fileKey = `${folder}/${secureId}.${extension}`;
+    const expiresIn = params.expiresIn || 900; // 15 minutes
 
-  async uploadFile(file: Buffer, path: string, mimeType: string): Promise<string> {
-    const bucket = this.getBucketForPath(path);
     const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: path,
-      Body: file,
-      ContentType: mimeType,
+      Bucket: this.bucket,
+      Key: fileKey,
+      ContentType: params.contentType,
     });
 
-    await this.client.send(command);
-    return path;
-  }
+    const uploadUrl = await getSignedUrl(this.client, command, { expiresIn });
+    const publicUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${fileKey}`;
 
-  async deleteFile(path: string): Promise<void> {
-    const bucket = this.getBucketForPath(path);
-    const command = new DeleteObjectCommand({
-      Bucket: bucket,
-      Key: path,
-    });
-
-    await this.client.send(command);
-  }
-
-  async getFileUrl(path: string): Promise<string> {
-    const bucket = this.getBucketForPath(path);
-    
-    // For public bucket, we can return the direct CDN/S3 URL
-    if (bucket === this.publicBucket) {
-      return `https://${this.publicBucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${path}`;
-    }
-
-    // For private files, generate a signed read URL with short expiry (e.g., 5 mins)
-    const command = new GetObjectCommand({
-      Bucket: this.privateBucket,
-      Key: path,
-    });
-    return getSignedUrl(this.client, command, { expiresIn: 300 });
-  }
-
-  async getSignedUploadUrl(path: string, expiresInSeconds: number = 600): Promise<string> {
-    const bucket = this.getBucketForPath(path);
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: path,
-    });
-
-    // Returns a URL that the client can use to upload a file directly to S3
-    return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+    return {
+      uploadUrl,
+      publicUrl,
+      fileKey,
+      expiresInSeconds: expiresIn,
+    };
   }
 }
+
+export const s3Storage = new S3StorageProvider();

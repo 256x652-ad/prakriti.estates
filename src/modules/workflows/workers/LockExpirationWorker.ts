@@ -1,79 +1,83 @@
 import { prisma } from "@/infrastructure/database/prisma";
-import { Prisma } from "@prisma/client";
 import { IRefundService, MockRefundService } from "../../transactions/services/DisputeService";
 import { withOutbox } from "../../outbox/core/withOutbox";
+import { Queues, createWorker } from "@/modules/workers/QueueManager";
+import { Job } from "bullmq";
 
 export class LockExpirationWorker {
   constructor(private refundService: IRefundService = new MockRefundService()) {}
 
   /**
-   * Identifies and forcefully expires any Property Locks that have surpassed their TTL.
-   * Typically triggered by a Node Cron running every 5 minutes, or scheduled via BullMQ.
+   * Scans for ACTIVE or REQUESTED PropertyLocks past their TTL,
+   * gracefully expires them, restores property inventory to AVAILABLE,
+   * handles token forfeiture / partial refunds, and emits LOCK_EXPIRED event.
    */
-  async processExpiredLocks() {
+  async processExpiredLocks(): Promise<{ expiredCount: number; errorsCount: number }> {
     console.log("[LockExpirationWorker] Scanning for expired property locks...");
 
-    // 1. Fetch locks that are past due but still hanging in ACTIVE or REQUESTED states
+    // 1. Fetch locks past their expiration time that are still ACTIVE or REQUESTED
     const expiredLocks = await prisma.propertyLock.findMany({
       where: {
         expiresAt: { lt: new Date() },
-        status: { in: ["ACTIVE", "REQUESTED"] }
+        status: { in: ["ACTIVE", "REQUESTED"] },
       },
-      include: { property: true }
+      include: { property: true },
     });
 
     if (expiredLocks.length === 0) {
-      return 0; // Nothing to process
+      return { expiredCount: 0, errorsCount: 0 };
     }
 
-    console.log(`[LockExpirationWorker] Found ${expiredLocks.length} expired locks. Processing...`);
+    console.log(`[LockExpirationWorker] Found ${expiredLocks.length} expired locks.`);
 
-    let processedCount = 0;
+    let expiredCount = 0;
+    let errorsCount = 0;
 
     for (const lock of expiredLocks) {
       try {
-        // 2. Wrap the expiration in our robust Outbox utility to ensure event emission
         await withOutbox(
-          prisma, 
-          "PROPERTY_UNLOCKED", 
-          { propertyId: lock.propertyId, lockId: lock.id, reason: "TTL_EXPIRED" },
+          prisma,
+          "LOCK_EXPIRED",
+          {
+            lockId: lock.id,
+            propertyId: lock.propertyId,
+            propertyTitle: lock.property.title,
+            userId: lock.userId,
+            reason: "TTL_EXPIRED",
+            expiredAt: new Date().toISOString(),
+          },
           async (tx) => {
-            
-            // A. Update the Lock Status
+            // A. Update Lock state
             await tx.propertyLock.update({
               where: { id: lock.id },
-              data: { status: "EXPIRED" }
+              data: { status: "EXPIRED" },
             });
 
-            // B. Release the Property Inventory Globally
+            // B. Revert Property to AVAILABLE
             await tx.property.update({
               where: { id: lock.propertyId },
-              data: { lockStatus: "AVAILABLE" }
+              data: { lockStatus: "AVAILABLE" },
             });
 
-            // C. FINANCIAL HOOK: Forfeiture vs Refund Rules
+            // C. Financial Ledger: Forfeiture vs partial refund if money was collected (ACTIVE)
             if (lock.status === "ACTIVE") {
-              // ACTIVE means the money is actually sitting in our Escrow
               const transaction = await tx.ledgerTransaction.findFirst({
-                where: { userId: lock.userId, status: "COMPLETED" },
-                orderBy: { createdAt: 'desc' }
+                where: { userId: lock.userId, status: "COMPLETED", propertyId: lock.propertyId },
+                orderBy: { createdAt: "desc" },
               });
 
               if (transaction) {
-                // Determine Forfeiture Rule (e.g. 50% penalty for expiring without completing purchase)
-                const penaltyRate = 0.50; 
+                const penaltyRate = 0.5; // 50% forfeiture policy
                 const refundAmount = lock.amount.mul(1 - penaltyRate);
                 const forfeitAmount = lock.amount.mul(penaltyRate);
 
-                // Call external gateway to release partial hold / refund
                 const refundSuccess = await this.refundService.processRefund(
-                  transaction.id, 
-                  refundAmount, 
+                  transaction.id,
+                  refundAmount,
                   "LOCK_EXPIRED_PARTIAL_FORFEITURE"
                 );
 
                 if (refundSuccess) {
-                  // Debit Escrow, credit buyer
                   await tx.financialLedgerEntry.create({
                     data: {
                       transactionId: transaction.id,
@@ -81,10 +85,10 @@ export class LockExpirationWorker {
                       entryType: "DEBIT",
                       eventCode: "REFUND",
                       amount: refundAmount,
-                      notes: `Lock expired. Partial refund issued.`
-                    }
+                      notes: `Lock expired. Partial refund credited back to buyer.`,
+                    },
                   });
-                  // Debit Escrow, credit platform (forfeit)
+
                   await tx.financialLedgerEntry.create({
                     data: {
                       transactionId: transaction.id,
@@ -92,30 +96,53 @@ export class LockExpirationWorker {
                       entryType: "CREDIT",
                       eventCode: "PLATFORM_FEE_DEDUCTION",
                       amount: forfeitAmount,
-                      notes: `Lock expired. 50% token forfeited to platform.`
-                    }
+                      notes: `Lock expired. 50% token forfeited to platform treasury.`,
+                    },
                   });
-                } else {
-                  throw new Error("Payment Gateway failed to process expiration refund.");
                 }
               }
             }
-            
+
             return true;
           }
         );
 
-        processedCount++;
-        console.log(`[LockExpirationWorker] Successfully expired lock ${lock.id}. Inventory freed.`);
-
-      } catch (error: any) {
-        // If one lock fails (e.g. Stripe API is down), we catch the error, log it, 
-        // and continue processing the rest of the array. The failed lock will just be retried 
-        // on the next cron execution!
-        console.error(`[LockExpirationWorker] FAILED to expire lock ${lock.id}:`, error.message);
+        expiredCount++;
+      } catch (err: any) {
+        errorsCount++;
+        console.error(`[LockExpirationWorker] Error expiring lock ${lock.id}:`, err.message);
       }
     }
 
-    return processedCount;
+    console.log(
+      `[LockExpirationWorker] Completed: ${expiredCount} expired, ${errorsCount} errors.`
+    );
+    return { expiredCount, errorsCount };
+  }
+
+  /**
+   * Registers BullMQ worker and schedules repeatable cron job every 5 minutes
+   */
+  startScheduledWorker() {
+    createWorker(
+      "scheduled-tasks",
+      async (job: Job) => {
+        if (job.name === "LOCK_EXPIRATION_CRON") {
+          await this.processExpiredLocks();
+        }
+      },
+      1
+    );
+
+    // Register repeatable job scheduler on queue (every 5 minutes)
+    Queues.ScheduledTasks.upsertJobScheduler(
+      "repeatable-lock-expiration-cron",
+      { pattern: "*/5 * * * *" },
+      { name: "LOCK_EXPIRATION_CRON", data: {} }
+    ).catch((err) => {
+      console.warn("[LockExpirationWorker] Schedule registration warning:", err.message);
+    });
   }
 }
+
+export const lockExpirationWorker = new LockExpirationWorker();

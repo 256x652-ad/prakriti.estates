@@ -1,14 +1,39 @@
 import React from "react";
 import { Metadata } from "next";
+import { buildProfessionalServiceSchema, JsonLd } from "@/lib/seo/structuredData";
 
 export const metadata: Metadata = {
-  title: "Prakriti Consultants | Engineering & Architecture",
-  description: "Expert structural engineering, Vastu, and architectural services.",
+  title: "Prakriti Consultants | Engineering, Vastu & Architecture",
+  description: "Expert structural engineering audits, Vedic Vastu compliance, and modern architectural blueprints led by IIT/HBTU alumni.",
+  openGraph: {
+    title: "Prakriti Consultants | Precision Engineering & Architecture",
+    description: "Expert structural integrity audits, Vedic Vastu harmonization, and architectural designs.",
+    url: "https://prakritiestates.com/consultants",
+    siteName: "Prakriti Estates",
+    images: [
+      {
+        url: "/images/consultants-hero.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Prakriti Consultants Engineering Team",
+      },
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Prakriti Consultants | Precision Engineering & Architecture",
+    description: "Expert structural integrity audits, Vedic Vastu harmonization, and architectural designs.",
+  },
 };
 
 export default function ConsultantsPage() {
+  const schema = buildProfessionalServiceSchema();
+
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
+      <JsonLd schema={schema} />
       <div className="max-w-5xl mx-auto">
         
         {/* Header Section */}

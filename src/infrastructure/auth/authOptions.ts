@@ -1,9 +1,16 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/infrastructure/database/prisma";
+import { AuditLogService } from "@/modules/audit/services/AuditLogService";
 import { compare } from "bcrypt";
 import { Role } from "@prisma/client";
 
+/**
+ * NEXTAUTH.JS AUTHENTICATION CONFIGURATION
+ * Two-Step Credentials Provider:
+ * 1. Password Verification (Email or Phone + Password)
+ * 2. Mandatory SMS OTP Verification Gate before JWT issuance
+ */
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -11,74 +18,165 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      id: "two-factor-credentials",
+      name: "Email/Password with SMS OTP",
       credentials: {
-        phoneNumber: { label: "Phone Number", type: "text" },
+        emailOrPhone: { label: "Email or Phone", type: "text" },
         password: { label: "Password", type: "password" },
-        otp: { label: "OTP (Activation)", type: "text" } // If OTP is required
+        otp: { label: "SMS OTP", type: "text" },
       },
-      async authorize(credentials) {
-        if (!credentials?.phoneNumber) throw new Error("Phone number is required");
+      async authorize(credentials, req) {
+        const ipAddress = (req?.headers?.["x-forwarded-for"] as string) || "127.0.0.1";
+        const userAgent = (req?.headers?.["user-agent"] as string) || "unknown";
 
-        const user = await prisma.user.findUnique({
-          where: { phoneNumber: credentials.phoneNumber }
+        if (!credentials?.emailOrPhone || !credentials?.password) {
+          throw new Error("INVALID_CREDENTIALS");
+        }
+        if (!credentials?.otp) {
+          throw new Error("OTP_REQUIRED");
+        }
+
+        const identifier = credentials.emailOrPhone.trim();
+
+        // 1. Fetch user by email or phone
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: identifier },
+              { phoneNumber: identifier },
+            ],
+          },
         });
 
-        if (!user) {
-          throw new Error("No user found with this phone number");
+        if (!user || !user.passwordHash) {
+          // Log failed login attempt
+          await AuditLogService.logSystemAction({
+            actorId: "ANONYMOUS",
+            actorRole: "USER",
+            actionType: "USER_LOGIN_FAILED",
+            targetEntity: "UserAuth",
+            targetId: identifier,
+            reasonCode: "INVALID_CREDENTIALS_USER_NOT_FOUND",
+            ipAddress,
+            userAgent,
+          });
+          throw new Error("INVALID_CREDENTIALS");
         }
 
-        // Logic for handling OTP verification during account activation
-        if (user.kycStatus === "PENDING" && credentials.otp) {
-          if (user.otpHash && user.otpExpiresAt && user.otpExpiresAt > new Date()) {
-            const isOtpValid = await compare(credentials.otp, user.otpHash);
-            if (!isOtpValid) throw new Error("Invalid OTP");
-            
-            // Mark user as active (or verified)
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { kycStatus: "VERIFIED", otpHash: null, otpExpiresAt: null }
-            });
-            user.kycStatus = "VERIFIED";
-          } else {
-             throw new Error("OTP expired or invalid");
-          }
-        } else if (user.kycStatus === "PENDING") {
-          throw new Error("Account not activated. Please verify OTP.");
+        // 2. Validate Password
+        const isPasswordValid = await compare(credentials.password, user.passwordHash);
+        if (!isPasswordValid) {
+          await AuditLogService.logSystemAction({
+            actorId: user.id,
+            actorRole: user.roles[0],
+            actionType: "USER_LOGIN_FAILED",
+            targetEntity: "UserAuth",
+            targetId: user.id,
+            reasonCode: "INVALID_PASSWORD",
+            ipAddress,
+            userAgent,
+          });
+          throw new Error("INVALID_CREDENTIALS");
         }
 
-        // For standard password check (if we added a password hash to the model)
-        // const isPasswordValid = await compare(credentials.password, user.passwordHash!);
-        // if (!isPasswordValid) throw new Error("Invalid password");
+        // 3. Mandatory SMS OTP Verification Gate
+        if (!user.otpHash || !user.otpExpiresAt || user.otpExpiresAt <= new Date()) {
+          throw new Error("OTP_EXPIRED");
+        }
+
+        const isOtpValid = await compare(credentials.otp, user.otpHash);
+        if (!isOtpValid) {
+          await AuditLogService.logSystemAction({
+            actorId: user.id,
+            actorRole: user.roles[0],
+            actionType: "USER_LOGIN_FAILED",
+            targetEntity: "UserAuth",
+            targetId: user.id,
+            reasonCode: "INVALID_OTP",
+            ipAddress,
+            userAgent,
+          });
+          throw new Error("INVALID_OTP");
+        }
+
+        // 4. Clear used OTP hash
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { otpHash: null, otpExpiresAt: null },
+        });
+
+        // 5. Audit Log Success
+        await AuditLogService.logSystemAction({
+          actorId: user.id,
+          actorRole: user.roles[0],
+          actionType: "USER_LOGIN_SUCCESS",
+          targetEntity: "UserAuth",
+          targetId: user.id,
+          reasonCode: "LOGIN_VERIFIED_2FA",
+          ipAddress,
+          userAgent,
+        });
 
         return {
           id: user.id,
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.phoneNumber,
+          email: user.email,
           phoneNumber: user.phoneNumber,
           roles: user.roles,
+          kycStatus: user.kycStatus,
         };
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      // Upon sign in, attach role and id to JWT
+    async jwt({ token, user, trigger, session }) {
+      // Upon sign in, inject database-verified identity, roles, and KYC status
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;
+        token.phoneNumber = (user as any).phoneNumber;
+        token.roles = (user as any).roles || [Role.USER];
+        token.kycStatus = (user as any).kycStatus || "PENDING";
       }
+
+      // Handle Impersonation Session Update Triggers
+      if (trigger === "update" && session) {
+        if (session.impersonateUserId) {
+          // Store original admin identity if not already stored
+          token.impersonatorId = token.impersonatorId || (token.id as string);
+          token.impersonatorRole = token.impersonatorRole || ((token.roles as string[])?.[0] || "SUPER_ADMIN");
+          token.id = session.impersonateUserId;
+          token.roles = session.impersonateRoles || [Role.USER];
+          token.phoneNumber = session.impersonatePhone || token.phoneNumber;
+          token.kycStatus = session.impersonateKycStatus || "VERIFIED";
+        } else if (session.revertImpersonation && token.impersonatorId) {
+          // Revert to original Super Admin
+          token.id = token.impersonatorId;
+          token.roles = [Role.ADMIN];
+          delete token.impersonatorId;
+          delete token.impersonatorRole;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
-      // Make token info available in the session object
+      // Expose verified roles and identity to Server Components and Client Session
       if (token && session.user) {
         (session.user as any).id = token.id;
-        (session.user as any).role = token.role as Role;
+        (session.user as any).phoneNumber = token.phoneNumber;
+        (session.user as any).roles = token.roles as Role[];
+        (session.user as any).kycStatus = token.kycStatus;
+        if (token.impersonatorId) {
+          (session.user as any).impersonatorId = token.impersonatorId;
+          (session.user as any).impersonatorRole = token.impersonatorRole;
+        }
       }
       return session;
-    }
+    },
   },
   pages: {
-    signIn: '/auth/signin', // Custom signin page
+    signIn: "/login",
+    error: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
 };

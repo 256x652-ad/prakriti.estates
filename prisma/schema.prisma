@@ -1,6 +1,7 @@
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
   extensions = [postgis]
 }
 
@@ -33,7 +34,9 @@ enum PropertyType {
 
 enum LifecycleStatus {
   DRAFT
+  PENDING_APPROVAL
   PUBLISHED
+  REJECTED
   ARCHIVED
 }
 
@@ -66,8 +69,10 @@ enum ServiceRequestType {
 
 enum ServiceRequestStatus {
   REQUESTED
+  ASSIGNED
   IN_PROGRESS
   COMPLETED
+  REJECTED
   CANCELLED
 }
 
@@ -119,6 +124,8 @@ enum LedgerEventCode {
 model User {
   id              String    @id @default(uuid())
   phoneNumber     String    @unique
+  email           String?   @unique
+  passwordHash    String?
   roles           Role[]    @default([USER])
   kycStatus       KycStatus @default(PENDING)
   otpHash         String?
@@ -142,6 +149,10 @@ model User {
   tenanciesAsLandlord Tenancy[]         @relation("LandlordRelation")
   impersonationsInitiated ImpersonationAuditLog[] @relation("AdminImpersonator")
   impersonationsReceived  ImpersonationAuditLog[] @relation("ImpersonatedUser")
+  devices                 Device[]
+  refreshTokens           RefreshToken[]
+  consultantAssignedServices ServiceRequest[] @relation("ConsultantServiceAssignments")
+  consultantAuditReports    AuditReport[]    @relation("ConsultantReports")
 }
 
 model KycVerification {
@@ -159,8 +170,10 @@ model KycVerification {
 
 model Property {
   id                 String                     @id @default(uuid())
+  slug               String?                    @unique
   title              String
   description        String
+  images             String[]                   @default([])
   type               PropertyType
   lifecycleStatus    LifecycleStatus            @default(DRAFT)
   lockStatus         LockStatus                 @default(AVAILABLE)
@@ -187,9 +200,12 @@ model Property {
   stayReservations   StayReservation[]
   savedBy            SavedProperty[]
   tenancies          Tenancy[]
+  auditReports       AuditReport[]
 
   @@index([location], name: "property_location_idx", type: Gist)
   @@index([boundary], name: "property_boundary_idx", type: Gist)
+  @@index([type, lockStatus, price])
+  @@index([isPrakritiCertified])
 }
 
 model PropertyBuyDetails {
@@ -219,20 +235,30 @@ model PropertyStayDetails {
   cancellationRule String   // e.g. "Strict", "Flexible"
 }
 
+enum ReservationStatus {
+  PAYMENT_PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
 model StayReservation {
-  id               String   @id @default(uuid())
+  id               String            @id @default(uuid())
   propertyId       String
-  property         Property @relation(fields: [propertyId], references: [id])
+  property         Property          @relation(fields: [propertyId], references: [id])
   userId           String
-  user             User     @relation(fields: [userId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
   checkInDate      DateTime
   checkOutDate     DateTime
   totalAmount      Decimal
-  status           String   @default("CONFIRMED") // CONFIRMED, CANCELLED
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  guestsCount      Int               @default(1)
+  paymentRef       String?           @unique
+  status           ReservationStatus @default(CONFIRMED)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([propertyId, checkInDate, checkOutDate])
+  @@index([userId, status])
 }
 
 model SavedProperty {
@@ -266,33 +292,77 @@ model PropertyLock {
   expiresAt       DateTime
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([userId, status])
+}
+
+enum AuditSyncStatus {
+  DRAFT
+  IN_REVIEW
+  SUBMITTED
+  SYNCHRONIZED
 }
 
 model PropertyAudit {
-  id              String       @id @default(uuid())
+  id              String          @id @default(uuid())
   propertyId      String
-  property        Property     @relation(fields: [propertyId], references: [id])
+  property        Property        @relation(fields: [propertyId], references: [id])
   consultantId    String
-  consultant      User         @relation("ConsultantAudits", fields: [consultantId], references: [id])
+  consultant      User            @relation("ConsultantAudits", fields: [consultantId], references: [id])
   type            AuditType
-  score           Int          
-  findings        String       
+  score           Int             @default(0)
+  findings        String          @default("")
+  version         Int             @default(1)
+  syncStatus      AuditSyncStatus @default(DRAFT)
+  checklist       Json?           // Array of { itemId, label, passed, notes }
+  measurements    Json?           // Array of { area, dimension, deflectionMm, remarks }
+  mediaUrls       String[]        @default([])
+  clientUpdatedAt DateTime?
   expiresAt       DateTime?    
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model ServiceRequest {
-  id         String               @id @default(uuid())
-  type       ServiceRequestType
-  status     ServiceRequestStatus @default(REQUESTED)
-  propertyId String
-  property   Property             @relation(fields: [propertyId], references: [id])
-  userId     String
-  user       User                 @relation(fields: [userId], references: [id])
-  notes      String?
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
+  id                    String               @id @default(uuid())
+  type                  ServiceRequestType
+  status                ServiceRequestStatus @default(REQUESTED)
+  propertyId            String
+  property              Property             @relation(fields: [propertyId], references: [id])
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id])
+  assignedConsultantId  String?
+  assignedConsultant    User?                @relation("ConsultantServiceAssignments", fields: [assignedConsultantId], references: [id])
+  notes                 String?
+  auditReport           AuditReport?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([propertyId])
+  @@index([assignedConsultantId, status])
+}
+
+model AuditReport {
+  id               String          @id @default(uuid())
+  serviceRequestId String          @unique
+  serviceRequest   ServiceRequest  @relation(fields: [serviceRequestId], references: [id])
+  propertyId       String
+  property         Property        @relation(fields: [propertyId], references: [id])
+  consultantId     String
+  consultant       User            @relation("ConsultantReports", fields: [consultantId], references: [id])
+  type             AuditType
+  score            Int             // Structural/Vastu compliance score out of 100
+  passed           Boolean         @default(false)
+  findings         String
+  recommendations  String?
+  reportPdfUrl     String?         // Secure S3 URL
+  isPublic         Boolean         @default(false) // Whether seller opted to make report publicly visible
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([propertyId, passed])
+  @@index([consultantId])
 }
 
 model LedgerTransaction {
@@ -410,6 +480,9 @@ model MonthlyInvoice {
   updatedAt       DateTime       @updatedAt
 
   lineItems       InvoiceLineItem[]
+
+  @@unique([tenancyId, invoiceMonth])
+  @@index([status, dueDate])
 }
 
 model InvoiceLineItem {
@@ -485,4 +558,122 @@ model ImpersonationAuditLog {
   startedAt       DateTime @default(now())
   endedAt         DateTime?
   ipAddress       String?
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+model Device {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     DevicePlatform
+  pushToken    String?        // Expo Push Token or APNS/FCM token
+  deviceId     String         // Hardware UUID / Vendor ID
+  appVersion   String?
+  osVersion    String?
+  deviceModel  String?
+  status       DeviceStatus   @default(ACTIVE)
+  lastActiveAt DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@unique([userId, deviceId])
+  @@index([userId, status])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  tokenHash   String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId    String?
+  device      Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+enum AuditActionType {
+  ADMIN_OVERRIDE
+  ADMIN_IMPERSONATION_START
+  ADMIN_IMPERSONATION_END
+  DISPUTE_RESOLUTION
+  PROPERTY_LOCK_FORFEIT
+  KYC_MANUAL_VERIFY
+  KYC_MANUAL_REJECT
+  ESCROW_MANUAL_RELEASE
+  MAINTENANCE_OVERRIDE
+  FEE_CONFIG_MUTATION
+  THEME_UPDATE
+  FEATURE_FLAG_TOGGLE
+  GLOBAL_SETTING_MUTATION
+  USER_LOGIN_SUCCESS
+  USER_LOGIN_FAILED
+}
+
+model AuditLog {
+  id           String          @id @default(uuid())
+  actorId      String          // User ID of Admin / Actor performing action
+  actorRole    String          @default("ADMIN")
+  actionType   AuditActionType
+  targetEntity String          // e.g. "Property:uuid", "LedgerTransaction:uuid"
+  targetId     String?         // Direct ID of the target resource
+  oldState     Json?           // Snapshot of state before change
+  newState     Json?           // Snapshot of state after change
+  reasonCode   String?         // Required rationale for compliance
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime        @default(now()) // Immutable timestamp
+
+  @@index([actorId])
+  @@index([actionType])
+  @@index([targetEntity])
+  @@index([createdAt])
+}
+
+model GlobalSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "MAINTENANCE_MODE", "DEFAULT_CURRENCY", "SUPPORT_PHONE"
+  value       Json     // Dynamic JSON payload (string, number, boolean, or complex object)
+  description String?
+  isPublic    Boolean  @default(false) // Exposed to frontend/mobile without auth
+  updatedBy   String?  // Admin ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([isPublic])
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "ENABLE_SHORT_STAY", "ENABLE_WHATSAPP", "ENABLE_HRA_RECEIPTS"
+  description String?
+  isEnabled   Boolean  @default(false)
+  rolloutPct  Int      @default(100) // 0-100% gradual rollout percentage
+  rules       Json?    // Targeting rules: { allowedRoles: ["ADMIN", "BETA_USER"], userIds: [] }
+  updatedBy   String?  // Admin ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([isEnabled])
 }
