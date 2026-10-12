@@ -240,8 +240,14 @@ async function runComprehensiveTests() {
 
   } catch (error: any) {
     console.error("\n❌ TEST FAILED:", error.message, error.stack);
+    process.exit(1);
   } finally {
     await prisma.$disconnect();
+    try {
+      const { redisClient } = await import('./src/infrastructure/redis/redisClient');
+      await redisClient.quit();
+    } catch {}
+    process.exit(0);
   }
 }
 
