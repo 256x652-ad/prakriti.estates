@@ -111,16 +111,27 @@ export default function PropertyMap({
     zoom: 11,
   });
 
-  // Re-center when results change and bounds are not locked in URL
+  // Re-center smoothly via Mapbox flyTo when search results change (never calls setViewState directly in useEffect)
+  const firstProp = initialProperties[0];
+  const targetKey = firstProp ? `${firstProp.lng.toFixed(4)},${firstProp.lat.toFixed(4)}` : "";
+  const lastCenteredKey = useRef<string>(targetKey);
+
   useEffect(() => {
-    if (!searchParams.get("bounds") && initialProperties.length > 0) {
-      setViewState((prev) => ({
-        ...prev,
-        longitude: initialProperties[0].lng,
-        latitude: initialProperties[0].lat,
-      }));
+    if (!targetKey || !firstProp) return;
+    if (searchParams.get("bounds")) return;
+
+    if (lastCenteredKey.current !== targetKey) {
+      lastCenteredKey.current = targetKey;
+      const map = mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current;
+      if (map?.flyTo) {
+        map.flyTo({
+          center: [firstProp.lng, firstProp.lat],
+          zoom: 11,
+          duration: 800,
+        });
+      }
     }
-  }, [initialProperties, searchParams]);
+  }, [targetKey, searchParams, firstProp]);
 
   // Convert properties to GeoJSON FeatureCollection for Supercluster
   const points = useMemo(() => {
@@ -197,12 +208,13 @@ export default function PropertyMap({
           trackUserLocation
           showAccuracyCircle
           onGeolocate={(e) => {
-            setViewState((prev) => ({
-              ...prev,
-              longitude: e.coords.longitude,
-              latitude: e.coords.latitude,
-              zoom: 14,
-            }));
+            const map = mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current;
+            if (map?.flyTo) {
+              map.flyTo({
+                center: [e.coords.longitude, e.coords.latitude],
+                zoom: 14,
+              });
+            }
           }}
         />
 
@@ -228,7 +240,13 @@ export default function PropertyMap({
                       supercluster.getClusterExpansionZoom(cluster.id),
                       20
                     );
-                    setViewState({ ...viewState, longitude, latitude, zoom: expansionZoom });
+                    const map = mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current;
+                    if (map?.flyTo) {
+                      map.flyTo({
+                        center: [longitude, latitude],
+                        zoom: expansionZoom,
+                      });
+                    }
                   }}
                 >
                   {pointCount}
