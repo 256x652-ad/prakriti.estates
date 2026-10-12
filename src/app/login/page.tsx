@@ -50,7 +50,6 @@ function LoginFormContent() {
       } else {
         router.push(callbackUrl);
       }
-      router.refresh();
     } catch (err: any) {
       setServerError(err.message || "Failed to authenticate.");
     } finally {
