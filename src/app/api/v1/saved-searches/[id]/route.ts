@@ -4,8 +4,8 @@ import { authOptions } from "@/infrastructure/auth/authOptions";
 import { prisma } from "@/infrastructure/database/prisma";
 
 export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,7 @@ export async function DELETE(
     }
 
     const userId = (session.user as any).id;
-    const { id } = params;
+    const { id } = await context.params;
 
     const existing = await prisma.savedSearch.findUnique({
       where: { id },
