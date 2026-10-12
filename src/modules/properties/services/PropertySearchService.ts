@@ -8,6 +8,11 @@ export interface SearchQueryFilters {
     maxLng: number;
     maxLat: number;
   };
+  radius?: {
+    lng: number;
+    lat: number;
+    distanceMeters: number;
+  };
   type?: "BUY" | "RENT" | "STAY";
   minPrice?: number;
   maxPrice?: number;
@@ -29,11 +34,21 @@ export interface SearchResultItem {
   images: string[];
   lng: number;
   lat: number;
+  distanceMeters?: number;
 }
 
+/**
+ * PROPERTY SEARCH SERVICE (SEARCH ENGINE ADAPTER)
+ * 
+ * Sits as the boundary interface between the application/UI layer and the search engine.
+ * 
+ * - Current Implementation: PostgreSQL + PostGIS (ST_MakeEnvelope, ST_DWithin, ST_Distance, GiST Index)
+ * - Future Scalability: Ready for zero-downtime swapping to OpenSearch / Elasticsearch / Algolia / Meilisearch
+ *   without altering UI components or business controllers.
+ */
 export class PropertySearchService {
   /**
-   * Executes optimized PostGIS geospatial search using ST_MakeEnvelope
+   * Executes PostGIS geospatial search using ST_MakeEnvelope (bounding box) or ST_DWithin (radius),
    * alongside relational filters and pagination. Strictly queries PUBLISHED listings.
    */
   async search(filters: SearchQueryFilters): Promise<{
@@ -49,7 +64,7 @@ export class PropertySearchService {
       Prisma.sql`p."lifecycleStatus" = 'PUBLISHED'`,
     ];
 
-    // 1. PostGIS Bounding Box Filter (ST_MakeEnvelope)
+    // 1. PostGIS Bounding Box Filter (Viewport search)
     if (filters.bounds) {
       const { minLng, minLat, maxLng, maxLat } = filters.bounds;
       conditions.push(
@@ -57,12 +72,20 @@ export class PropertySearchService {
       );
     }
 
-    // 2. Listing Mode (BUY, RENT, STAY)
+    // 2. PostGIS Radius Search (ST_DWithin for nearby properties)
+    if (filters.radius) {
+      const { lng, lat, distanceMeters } = filters.radius;
+      conditions.push(
+        Prisma.sql`ST_DWithin(p.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${distanceMeters})`
+      );
+    }
+
+    // 3. Listing Mode Filter (BUY, RENT, STAY)
     if (filters.type) {
       conditions.push(Prisma.sql`p."type" = ${filters.type}::"PropertyType"`);
     }
 
-    // 3. Price Filter
+    // 4. Price Tier Filter
     if (filters.minPrice !== undefined) {
       conditions.push(Prisma.sql`p."price" >= ${filters.minPrice}`);
     }
@@ -70,12 +93,12 @@ export class PropertySearchService {
       conditions.push(Prisma.sql`p."price" <= ${filters.maxPrice}`);
     }
 
-    // 4. Certification (Prakriti Gold Standard)
+    // 5. Certification Filter (Gold Pin)
     if (filters.isPrakritiCertified) {
       conditions.push(Prisma.sql`p."isPrakritiCertified" = true`);
     }
 
-    // 5. Text Search (ILIKE)
+    // 6. Text Search (Case-insensitive ILIKE across title & description)
     if (filters.q) {
       const pattern = `%${filters.q}%`;
       conditions.push(
@@ -84,6 +107,16 @@ export class PropertySearchService {
     }
 
     const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
+
+    // Order clause: When searching nearby radius, sort by physical distance ASC
+    let orderClause = Prisma.sql`ORDER BY p."createdAt" DESC`;
+    let distanceField = Prisma.sql`0 as "distanceMeters"`;
+
+    if (filters.radius) {
+      const { lng, lat } = filters.radius;
+      distanceField = Prisma.sql`ST_Distance(p.location::geography, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) as "distanceMeters"`;
+      orderClause = Prisma.sql`ORDER BY "distanceMeters" ASC, p."createdAt" DESC`;
+    }
 
     // Query Items with PostGIS ST_X and ST_Y coordinates
     const itemsRaw = await prisma.$queryRaw<any[]>`
@@ -98,10 +131,11 @@ export class PropertySearchService {
         p."isPrakritiCertified",
         p.images,
         ST_X(p.location::geometry) as lng,
-        ST_Y(p.location::geometry) as lat
+        ST_Y(p.location::geometry) as lat,
+        ${distanceField}
       FROM "Property" p
       ${whereClause}
-      ORDER BY p."createdAt" DESC
+      ${orderClause}
       LIMIT ${limit}
       OFFSET ${offset}
     `;
@@ -127,6 +161,7 @@ export class PropertySearchService {
       images: Array.isArray(row.images) ? row.images : [],
       lng: Number(row.lng),
       lat: Number(row.lat),
+      distanceMeters: row.distanceMeters ? Math.round(Number(row.distanceMeters)) : undefined,
     }));
 
     return {
@@ -138,9 +173,30 @@ export class PropertySearchService {
   }
 
   /**
-   * Helper method for bounding box viewport search
+   * Dedicated helper for nearby properties given coordinates and radius
    */
-  async getPropertiesInViewport(bounds: { minLng: number; minLat: number; maxLng: number; maxLat: number }): Promise<SearchResultItem[]> {
+  async getNearbyProperties(
+    lng: number,
+    lat: number,
+    radiusMeters: number = 10000,
+    limit: number = 10
+  ): Promise<SearchResultItem[]> {
+    const res = await this.search({
+      radius: { lng, lat, distanceMeters: radiusMeters },
+      limit,
+    });
+    return res.items;
+  }
+
+  /**
+   * Helper method for viewport search
+   */
+  async getPropertiesInViewport(bounds: {
+    minLng: number;
+    minLat: number;
+    maxLng: number;
+    maxLat: number;
+  }): Promise<SearchResultItem[]> {
     const res = await this.search({ bounds });
     return res.items;
   }

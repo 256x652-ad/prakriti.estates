@@ -1,16 +1,17 @@
 "use client";
 
 import { useRef, useCallback, useMemo, useState } from "react";
-import Map, { Marker, ViewStateChangeEvent } from "react-map-gl/mapbox";
+import Map, { Marker, ViewStateChangeEvent, NavigationControl, GeolocateControl } from "react-map-gl/mapbox";
 import useSupercluster from "use-supercluster";
 import { useRouter, useSearchParams } from "next/navigation";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { SearchResultItem } from "@/modules/properties/services/PropertySearchService";
 import { formatIndianPrice } from "@/components/Cards/PropertyCard";
+import { Lock, Award } from "lucide-react";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-// 1. DYNAMIC HTML MARKER COMPONENT
+// 1. DYNAMIC PROPERTY MARKER WITH COMPREHENSIVE STATES
 const PropertyMarker = ({
   property,
   onClick,
@@ -20,57 +21,76 @@ const PropertyMarker = ({
 }) => {
   const isGoldPin = property.isPrakritiCertified;
   const isLocked = property.lockStatus !== "AVAILABLE";
-  const modeColor =
+
+  // Property-type color coding
+  const modeBadgeColor =
     property.type === "BUY"
-      ? "bg-blue-600"
+      ? "bg-blue-600 border-blue-400"
       : property.type === "RENT"
-      ? "bg-emerald-600"
-      : "bg-purple-600";
+      ? "bg-emerald-600 border-emerald-400"
+      : "bg-purple-600 border-purple-400";
 
   return (
     <div
       onClick={onClick}
-      className={`
-      relative group cursor-pointer flex flex-col items-center justify-center
-      ${isLocked ? "opacity-50 grayscale" : "hover:scale-110 transition-transform"}
-    `}
+      className={`relative group cursor-pointer flex flex-col items-center justify-center transition-all duration-200 ${
+        isLocked
+          ? "opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
+          : "hover:scale-110 active:scale-95"
+      }`}
     >
-      {/* Tooltip on hover */}
-      <div className="absolute bottom-full mb-2 hidden group-hover:block w-max bg-gray-900/95 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl z-50 pointer-events-none">
-        <p className="font-semibold">{property.title}</p>
-        <p className="text-[11px] text-gray-300">
-          {formatIndianPrice(property.price)} • {property.type}
-          {isLocked && " (Locked)"}
-        </p>
+      {/* Tooltip on Hover */}
+      <div className="absolute bottom-full mb-2.5 hidden group-hover:flex flex-col w-max max-w-[200px] bg-slate-950/95 backdrop-blur-md text-white text-xs px-3 py-2 rounded-xl shadow-2xl z-50 pointer-events-none border border-slate-800">
+        <p className="font-extrabold truncate text-white">{property.title}</p>
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mt-0.5">
+          <span className="font-bold text-emerald-400">{formatIndianPrice(property.price)}</span>
+          <span>•</span>
+          <span className="uppercase text-[10px] font-semibold">{property.type}</span>
+          {isLocked && <span className="text-red-400 font-bold">(Locked)</span>}
+        </div>
+        {property.distanceMeters !== undefined && (
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            📍 {(property.distanceMeters / 1000).toFixed(1)} km away
+          </p>
+        )}
       </div>
 
-      {/* Main Marker Badge with Premium Gold Pin Overrides */}
+      {/* Main Marker Badge State */}
       {isGoldPin ? (
+        // STATE 1: PRAKRITI CERTIFIED GOLD PIN (Gleaming Gold Badge with Crown Accent)
         <div className="flex flex-col items-center">
-          <div className="flex items-center gap-1 px-3 py-1 rounded-full text-amber-950 font-extrabold text-xs shadow-lg bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 ring-2 ring-amber-200/90 border border-amber-100 animate-pulse">
-            {/* Premium Gold Pin Crown / Star SVG */}
-            <svg className="w-3.5 h-3.5 fill-amber-950" viewBox="0 0 24 24">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
+          <div className="flex items-center gap-1 px-3 py-1 rounded-full text-slate-950 font-black text-xs shadow-xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 ring-2 ring-amber-300/80 border border-yellow-100 animate-pulse">
+            <Award className="w-3.5 h-3.5 fill-slate-950 flex-shrink-0" />
+            <span>{formatIndianPrice(property.price)}</span>
+            {isLocked && <Lock className="w-3 h-3 text-red-900 ml-0.5" />}
+          </div>
+          <div className="w-3 h-3 rotate-45 -mt-1.5 bg-gradient-to-br from-amber-400 to-amber-600 border-r border-b border-amber-300 shadow-xs" />
+        </div>
+      ) : isLocked ? (
+        // STATE 2: ESCROW LOCKED (Red Accent State)
+        <div className="flex flex-col items-center">
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-white font-bold text-xs shadow-md bg-slate-800 border border-red-500/80">
+            <Lock className="w-3 h-3 text-red-400" />
             <span>{formatIndianPrice(property.price)}</span>
           </div>
-          <div className="w-3 h-3 rotate-45 -mt-1.5 bg-gradient-to-br from-amber-400 to-amber-600 border-r border-b border-amber-300 shadow-sm" />
+          <div className="w-2.5 h-2.5 rotate-45 -mt-1 bg-slate-800 border-r border-b border-red-500/80" />
         </div>
       ) : (
+        // STATE 3: AVAILABLE (Categorized Color by Property Type: BUY/RENT/STAY)
         <div className="flex flex-col items-center">
           <div
-            className={`flex items-center justify-center px-2.5 py-1 rounded-full text-white font-bold text-xs shadow-md border border-white/20 ${modeColor}`}
+            className={`flex items-center justify-center px-2.5 py-1 rounded-full text-white font-bold text-xs shadow-md border ${modeBadgeColor}`}
           >
             {formatIndianPrice(property.price)}
           </div>
-          <div className={`w-2.5 h-2.5 rotate-45 -mt-1 ${modeColor}`} />
+          <div className={`w-2.5 h-2.5 rotate-45 -mt-1 ${modeBadgeColor.split(" ")[0]}`} />
         </div>
       )}
     </div>
   );
 };
 
-// 2. MAIN MAP PROVIDER
+// 2. MAIN MAP COMPONENT WITH SUPERCLUSTER & POSTGIS VIEWPORT SYNC
 export default function PropertyMap({
   initialProperties = [],
 }: {
@@ -80,18 +100,18 @@ export default function PropertyMap({
   const searchParams = useSearchParams();
   const mapRef = useRef<any>(null);
 
-  // Compute center from properties or fallback to Delhi [77.2090, 28.6139]
+  // Compute center from properties or fallback to Delhi NCR [77.2090, 28.6139]
   const defaultLng = initialProperties.length > 0 ? initialProperties[0].lng : 77.209;
   const defaultLat = initialProperties.length > 0 ? initialProperties[0].lat : 28.6139;
 
-  // Map state
+  // Viewport State
   const [viewState, setViewState] = useState({
     longitude: defaultLng,
     latitude: defaultLat,
     zoom: 11,
   });
 
-  // Convert properties to GeoJSON for Supercluster
+  // Convert properties to GeoJSON FeatureCollection for Supercluster
   const points = useMemo(() => {
     return initialProperties
       .filter((p) => typeof p.lng === "number" && typeof p.lat === "number")
@@ -102,11 +122,12 @@ export default function PropertyMap({
       }));
   }, [initialProperties]);
 
-  // 3. CLUSTERING CONFIGURATION
+  // Read current map bounds for clustering calculation
   const bounds = mapRef.current
     ? mapRef.current.getMap().getBounds().toArray().flat()
     : null;
 
+  // 3. SUPERCLUSTER CONFIGURATION
   const { clusters, supercluster } = useSupercluster({
     points,
     bounds,
@@ -114,7 +135,7 @@ export default function PropertyMap({
     options: { radius: 75, maxZoom: 16 },
   });
 
-  // Debounced URL Sync
+  // 4. DEBOUNCED VIEWPORT-TO-POSTGIS URL SYNC
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const onMoveEnd = useCallback(
     (e: ViewStateChangeEvent) => {
@@ -127,7 +148,7 @@ export default function PropertyMap({
         const currentParams = new URLSearchParams(searchParams.toString());
         currentParams.set("bounds", boundsString);
 
-        // Shallow route push triggers Server Component re-fetch without losing client state
+        // Shallow route push triggers PostGIS Server Component re-fetch without losing client zoom
         router.push(`?${currentParams.toString()}`, { scroll: false });
       }, 500); // 500ms debounce
     },
@@ -144,14 +165,32 @@ export default function PropertyMap({
         onMove={(evt) => setViewState(evt.viewState)}
         onMoveEnd={onMoveEnd}
         maxZoom={20}
+        reuseMaps
       >
+        {/* Navigation & Geolocation Controls for Responsive Mobile UX */}
+        <NavigationControl position="bottom-right" />
+        <GeolocateControl
+          position="bottom-right"
+          trackUserLocation
+          showAccuracyCircle
+          onGeolocate={(e) => {
+            setViewState((prev) => ({
+              ...prev,
+              longitude: e.coords.longitude,
+              latitude: e.coords.latitude,
+              zoom: 14,
+            }));
+          }}
+        />
+
+        {/* Render Clusters & Individual Property Markers */}
         {clusters.map((cluster: any) => {
           const [longitude, latitude] = cluster.geometry.coordinates;
           const { cluster: isCluster, point_count: pointCount } = cluster.properties;
 
           if (isCluster) {
-            // Render Cluster Ring
-            const size = 32 + (pointCount / Math.max(points.length, 1)) * 36;
+            // Render Cluster Bubble
+            const size = 34 + (pointCount / Math.max(points.length, 1)) * 36;
             return (
               <Marker
                 key={`cluster-${cluster.id}`}
@@ -159,7 +198,7 @@ export default function PropertyMap({
                 latitude={latitude}
               >
                 <div
-                  className="bg-emerald-900/90 text-white rounded-full flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:bg-emerald-700 transition"
+                  className="bg-emerald-900/95 text-white rounded-full flex items-center justify-center font-black shadow-xl border-2 border-white cursor-pointer hover:bg-emerald-700 hover:scale-105 transition-all text-xs"
                   style={{ width: `${size}px`, height: `${size}px` }}
                   onClick={() => {
                     const expansionZoom = Math.min(
@@ -175,7 +214,7 @@ export default function PropertyMap({
             );
           }
 
-          // Render Individual Property
+          // Render Individual Property Pin
           const prop = cluster.properties as SearchResultItem;
           return (
             <Marker
