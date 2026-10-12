@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,11 +33,17 @@ export default function SearchLayoutShell({
     searchParams.get("certifiedOnly") === "true";
   const currentMinPrice = searchParams.get("minPrice") || "";
   const currentMaxPrice = searchParams.get("maxPrice") || "";
+  const hasBounds = Boolean(searchParams.get("bounds"));
 
   // Local state
   const [searchQuery, setSearchQuery] = useState(currentQuery);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
+  // Keep search input synced with URL state
+  useEffect(() => {
+    setSearchQuery(currentQuery);
+  }, [currentQuery]);
 
   // Helper to push URL param updates smoothly
   const updateParams = (updates: Record<string, string | null>) => {
@@ -57,14 +63,14 @@ export default function SearchLayoutShell({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateParams({ q: searchQuery.trim() || null, query: null });
+    updateParams({ q: searchQuery.trim() || null, query: null, bounds: null });
   };
 
   const setTypeFilter = (type: string) => {
     if (type === "ALL") {
-      updateParams({ type: null, mode: null });
+      updateParams({ type: null, mode: null, bounds: null });
     } else {
-      updateParams({ type, mode: null });
+      updateParams({ type, mode: null, bounds: null });
     }
   };
 
@@ -72,6 +78,7 @@ export default function SearchLayoutShell({
     updateParams({
       isPrakritiCertified: isCertifiedOnly ? null : "true",
       certifiedOnly: null,
+      bounds: null,
     });
   };
 
@@ -197,8 +204,19 @@ export default function SearchLayoutShell({
             {isCertifiedOnly && <Check className="w-3 h-3 text-amber-700 ml-0.5" />}
           </button>
 
+          {/* Viewport Bounds Chip */}
+          {hasBounds && (
+            <button
+              onClick={() => updateParams({ bounds: null })}
+              className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer flex items-center gap-1"
+            >
+              <span>Map Viewport</span>
+              <X className="w-3 h-3 text-blue-500" />
+            </button>
+          )}
+
           {/* Quick Clear All Filters */}
-          {(currentQuery || currentType !== "ALL" || isCertifiedOnly || currentMinPrice || currentMaxPrice) && (
+          {(currentQuery || currentType !== "ALL" || isCertifiedOnly || currentMinPrice || currentMaxPrice || hasBounds) && (
             <button
               onClick={() => router.push("/search")}
               className="text-xs text-red-600 font-semibold hover:underline px-2 py-1 cursor-pointer flex items-center gap-1"

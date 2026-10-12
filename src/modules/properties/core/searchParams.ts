@@ -10,11 +10,27 @@ import { z } from "zod";
  * - bounds / radius: PostGIS geospatial bounds
  */
 export const SearchFilterSchema = z.object({
-  type: z.enum(["BUY", "RENT", "STAY"]).optional(),
+  type: z
+    .preprocess((val) => {
+      if (typeof val === "string") {
+        const upper = val.toUpperCase().trim();
+        if (["BUY", "RENT", "STAY"].includes(upper)) return upper;
+      }
+      return undefined;
+    }, z.enum(["BUY", "RENT", "STAY"]).optional()),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
-  isPrakritiCertified: z.coerce.boolean().optional(),
-  q: z.string().optional(),
+  isPrakritiCertified: z
+    .preprocess((val) => {
+      if (val === true || val === "true" || val === "1") return true;
+      if (val === false || val === "false" || val === "0") return false;
+      return undefined;
+    }, z.boolean().optional()),
+  q: z
+    .preprocess((val) => {
+      if (typeof val === "string" && val.trim().length > 0) return val.trim();
+      return undefined;
+    }, z.string().optional()),
 
   // Viewport bounds (comma-separated string from URL: minLng,minLat,maxLng,maxLat)
   bounds: z
