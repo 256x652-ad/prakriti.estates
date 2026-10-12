@@ -1,63 +1,56 @@
 import React from "react";
+import { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/infrastructure/auth/authOptions";
-import { prisma } from "@/infrastructure/database/prisma";
 import { AppShell } from "@/components/Layout/AppShell";
 import HeroSection from "@/components/Home/HeroSection";
-import InventorySection from "@/components/Home/InventorySection";
-import ConsultantTrustBlock from "@/components/Home/ConsultantTrustBlock";
-import MarketplaceFooter from "@/components/Home/MarketplaceFooter";
-import { PropertyCardData } from "@/components/Home/HomepagePropertyCard";
+import {
+  detectUserCity,
+  getFeaturedProperties,
+  getCertifiedProperties,
+} from "@/modules/discovery/services/GeolocationService";
+import {
+  LazyInventoryCarousels,
+  LazyConsultantTrustBlock,
+  LazyMarketplaceFooter,
+} from "@/components/Home/DynamicSections";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Prakriti Estates — India's Certified Real Estate & Engineering Marketplace",
   description:
     "Explore certified eco-friendly villas, verified plots, and long-term rental estates backed by IIT-tier structural audits and 72-hour escrow locks.",
-};
-
-const DEFAULT_IMAGES: Record<string, string[]> = {
-  STAY: ["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80"],
-  BUY: ["https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80"],
-  RENT: ["https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80"],
+  openGraph: {
+    title: "Prakriti Estates — Buy, Rent & Stay Certified",
+    description:
+      "Map-centric discovery with cryptographic escrow locks & IIT-grade engineering due diligence.",
+    url: "https://prakritiestates.com",
+    siteName: "Prakriti Estates",
+    locale: "en_IN",
+    type: "website",
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+        width: 1200,
+        height: 630,
+        alt: "Prakriti Estates Certified Living",
+      },
+    ],
+  },
 };
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
 
-  // Fetch published properties from the database
-  let dbProperties: any[] = [];
-  try {
-    dbProperties = await prisma.property.findMany({
-      where: {
-        lifecycleStatus: "PUBLISHED",
-      },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-    });
-  } catch (error) {
-    console.error("Failed to fetch homepage properties:", error);
-  }
+  // 1. Geolocated user city detection (fallback strictly to Gorakhpur, UP)
+  const location = await detectUserCity();
 
-  // Format properties into Card Data
-  const formattedProperties: PropertyCardData[] = dbProperties.map((p) => ({
-    id: p.id,
-    slug: p.slug,
-    title: p.title,
-    description: p.description,
-    price: Number(p.price) || 0,
-    city: p.type === "STAY" ? "Gurgaon" : p.type === "BUY" ? "Noida" : "South Delhi",
-    type: p.type,
-    mediaUrls:
-      p.images && p.images.length > 0
-        ? p.images
-        : DEFAULT_IMAGES[p.type] || DEFAULT_IMAGES.BUY,
-    isPrakritiCertified: p.isPrakritiCertified ?? false,
-  }));
+  // 2. Hydrate cached inventory streams in parallel (10-minute ISR)
+  const [featuredProperties, certifiedProperties] = await Promise.all([
+    getFeaturedProperties(location.city),
+    getCertifiedProperties(),
+  ]);
 
-  const certifiedList = formattedProperties.filter((p) => p.isPrakritiCertified);
-  const featuredList = formattedProperties;
-
-  // Format AppShell User
+  // 3. Format AppShell User
   const appShellUser = session?.user
     ? {
         id: (session.user as any).id || "user",
@@ -68,25 +61,55 @@ export default async function HomePage() {
       }
     : null;
 
+  // 4. Local SEO Structured Data (JSON-LD)
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateAgent",
+    name: "Prakriti Estates",
+    image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
+    url: "https://prakritiestates.com",
+    telephone: "+91-9999999999",
+    priceRange: "₹₹₹₹",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Park Road",
+      addressLocality: location.city,
+      addressRegion: location.region,
+      addressCountry: "IN",
+    },
+    geo: {
+      "@type": "GeoCoordinates",
+      latitude: "26.7606",
+      longitude: "83.3732",
+    },
+    areaServed: [location.city, "Gorakhpur", "Lucknow", "Gurgaon", "Noida", "Bengaluru"],
+  };
+
   return (
-    <AppShell user={appShellUser}>
-      <main className="min-h-screen bg-slate-50 flex flex-col">
-        {/* 1. Spatial Discovery Hero with Multi-Tab Search */}
-        <HeroSection defaultLocation="Gorakhpur" />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <AppShell user={appShellUser}>
+        <main className="min-h-screen bg-slate-50 flex flex-col">
+          {/* Synchronously loaded Hero with Unified Search */}
+          <HeroSection defaultLocation={location.city} />
 
-        {/* 2. Real-time Inventory Carousels */}
-        <InventorySection
-          cityName="Gorakhpur & NCR Hubs"
-          featuredProperties={featuredList}
-          certifiedProperties={certifiedList}
-        />
+          {/* Lazily loaded Inventory Carousels */}
+          <LazyInventoryCarousels
+            cityName={location.city}
+            featuredProperties={featuredProperties}
+            certifiedProperties={certifiedProperties}
+          />
 
-        {/* 3. Engineering Authority Trust Block */}
-        <ConsultantTrustBlock />
+          {/* Lazily loaded Engineering Trust Block */}
+          <LazyConsultantTrustBlock />
 
-        {/* 4. Platform Guarantees & Marketplace Footer */}
-        <MarketplaceFooter />
-      </main>
-    </AppShell>
+          {/* Lazily loaded Platform Guarantees & Footer */}
+          <LazyMarketplaceFooter />
+        </main>
+      </AppShell>
+    </>
   );
 }
