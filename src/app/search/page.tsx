@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   propertySearchService,
   SearchQueryFilters,
@@ -30,7 +31,7 @@ export default async function SearchPage({
       : undefined;
 
   const rawParams = {
-    type: typeof normalizedType === "string" ? normalizedType.toUpperCase() : undefined,
+    type: typeof normalizedType === "string" ? normalizedType : undefined,
     minPrice: resolvedParams.minPrice,
     maxPrice: resolvedParams.maxPrice,
     isPrakritiCertified: normalizedCertified,
@@ -39,14 +40,15 @@ export default async function SearchPage({
     q: typeof normalizedQuery === "string" ? normalizedQuery : undefined,
   };
 
-  const parsedFilters = SearchFilterSchema.parse(rawParams);
+  const parseResult = SearchFilterSchema.safeParse(rawParams);
+  const parsedFilters = parseResult.success ? parseResult.data : {};
 
   let properties: SearchResultItem[] = [];
   let totalCount = 0;
 
   try {
     const filters: SearchQueryFilters = {
-      type: parsedFilters.type as any,
+      type: parsedFilters.type,
       minPrice: parsedFilters.minPrice,
       maxPrice: parsedFilters.maxPrice,
       isPrakritiCertified: parsedFilters.isPrakritiCertified,
@@ -59,33 +61,6 @@ export default async function SearchPage({
     const result = await propertySearchService.search(filters);
     properties = result.items;
     totalCount = result.total;
-
-    // Gracefully fallback to mock data only if zero items match
-    if (properties.length === 0) {
-      let mockData = getMockSearchResults();
-      if (parsedFilters.type) {
-        mockData = mockData.filter((p) => p.type === parsedFilters.type);
-      }
-      if (parsedFilters.minPrice) {
-        mockData = mockData.filter((p) => p.price >= (parsedFilters.minPrice as number));
-      }
-      if (parsedFilters.maxPrice) {
-        mockData = mockData.filter((p) => p.price <= (parsedFilters.maxPrice as number));
-      }
-      if (parsedFilters.isPrakritiCertified) {
-        mockData = mockData.filter((p) => p.isPrakritiCertified);
-      }
-      if (parsedFilters.q) {
-        const query = parsedFilters.q.toLowerCase();
-        mockData = mockData.filter(
-          (p) =>
-            p.title.toLowerCase().includes(query) ||
-            p.description.toLowerCase().includes(query)
-        );
-      }
-      properties = mockData;
-      totalCount = mockData.length;
-    }
   } catch (error) {
     console.warn(
       "[SearchPage] Database query or PostGIS error, failing over gracefully to type-safe domain mocks:",
@@ -125,23 +100,39 @@ export default async function SearchPage({
         <div className="flex items-center justify-between pb-2 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-500">
             Showing <span className="font-extrabold text-slate-900">{properties.length}</span>{" "}
-            {properties.length === 1 ? "listing" : "listings"} in viewport
+            {properties.length === 1 ? "listing" : "listings"}
+            {parsedFilters.bounds ? " in map viewport" : ""}
           </p>
-          {parsedFilters.type && (
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-              {parsedFilters.type}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {parsedFilters.type && (
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                {parsedFilters.type}
+              </span>
+            )}
+            {parsedFilters.isPrakritiCertified && (
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                ⭐ Certified
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Listings List */}
         {properties.length === 0 ? (
-          <div className="py-16 text-center space-y-2">
-            <span className="text-3xl block">🔍</span>
+          <div className="py-16 text-center space-y-3 px-4">
+            <span className="text-4xl block">🔍</span>
             <p className="text-sm font-bold text-slate-800">No properties found</p>
-            <p className="text-xs text-slate-400">
-              Try panning the map or clearing your search filters above.
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              {parsedFilters.bounds
+                ? "No listings match your criteria in the current map viewport. Try zooming out or clearing the viewport."
+                : "No listings match your current search filters. Try adjusting your search query or filters."}
             </p>
+            <Link
+              href="/search"
+              className="inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-1.5 rounded-full border border-emerald-200 transition"
+            >
+              Reset All Filters
+            </Link>
           </div>
         ) : (
           <div className="space-y-4">

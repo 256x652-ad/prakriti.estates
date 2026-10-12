@@ -20,8 +20,12 @@ export default function HeroSection({
     e.preventDefault();
     const params = new URLSearchParams();
     params.set("mode", activeTab);
-    if (query.trim()) params.set("query", query.trim());
-    if (propertyType !== "ALL") params.set("type", propertyType);
+    const terms: string[] = [];
+    if (query.trim()) terms.push(query.trim());
+    if (propertyType !== "ALL") terms.push(propertyType);
+    if (terms.length > 0) {
+      params.set("query", terms.join(" "));
+    }
     router.push(`/search?${params.toString()}`);
   };
 

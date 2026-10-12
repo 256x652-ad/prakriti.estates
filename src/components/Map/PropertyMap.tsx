@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useMemo, useState } from "react";
+import { useRef, useCallback, useMemo, useState, useEffect } from "react";
 import Map, { Marker, ViewStateChangeEvent, NavigationControl, GeolocateControl } from "react-map-gl/mapbox";
 import useSupercluster from "use-supercluster";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -111,6 +111,17 @@ export default function PropertyMap({
     zoom: 11,
   });
 
+  // Re-center when results change and bounds are not locked in URL
+  useEffect(() => {
+    if (!searchParams.get("bounds") && initialProperties.length > 0) {
+      setViewState((prev) => ({
+        ...prev,
+        longitude: initialProperties[0].lng,
+        latitude: initialProperties[0].lat,
+      }));
+    }
+  }, [initialProperties, searchParams]);
+
   // Convert properties to GeoJSON FeatureCollection for Supercluster
   const points = useMemo(() => {
     return initialProperties
@@ -135,10 +146,16 @@ export default function PropertyMap({
     options: { radius: 75, maxZoom: 16 },
   });
 
-  // 4. DEBOUNCED VIEWPORT-TO-POSTGIS URL SYNC
+  // 4. DEBOUNCED VIEWPORT-TO-POSTGIS URL SYNC (User gesture only)
+  const isUserInteracting = useRef(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const onMoveEnd = useCallback(
     (e: ViewStateChangeEvent) => {
+      // Guard: Only update URL bounds if move was initiated by user gesture
+      const isInteractive = Boolean((e as any)?.originalEvent || isUserInteracting.current);
+      if (!isInteractive) return;
+      isUserInteracting.current = false;
+
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
       debounceTimer.current = setTimeout(() => {
@@ -163,6 +180,12 @@ export default function PropertyMap({
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle="mapbox://styles/mapbox/light-v11"
         onMove={(evt) => setViewState(evt.viewState)}
+        onDragStart={() => {
+          isUserInteracting.current = true;
+        }}
+        onZoomStart={() => {
+          isUserInteracting.current = true;
+        }}
         onMoveEnd={onMoveEnd}
         maxZoom={20}
         reuseMaps
