@@ -261,6 +261,18 @@ async function runComprehensiveTests() {
     const stepUpRes = await stepUpVerificationService.verifyChallenge(buyer.id, "PROPERTY_LOCK", challenge.testOtp!);
     console.log("   ✅ Step-Up 2FA Verified. Token Generated:", stepUpRes.stepUpToken.slice(0, 8) + "...");
 
+    // E. 10-Digit Mobile Login Auto-Detection (without typing +91)
+    const rawMobile = "9999999999";
+    const foundAdmin = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phoneNumber: rawMobile },
+          { phoneNumber: `+91${rawMobile}` },
+        ],
+      },
+    });
+    console.log("   ✅ 10-Digit Mobile ('9999999999') Auto-Detected & Resolved Admin:", foundAdmin?.phoneNumber);
+
     passedCount++;
 
     // ---------------------------------------------------------

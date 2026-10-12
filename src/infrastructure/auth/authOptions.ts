@@ -35,12 +35,26 @@ export const authOptions: NextAuthOptions = {
 
         const identifier = credentials.emailOrPhone.trim();
 
-        // 1. Fetch user by email or phone
+        // Normalize phone number (e.g. "9999999999" -> ["9999999999", "+919999999999"])
+        const cleanDigits = identifier.replace(/\D/g, "");
+        const searchTerms = [identifier];
+        if (cleanDigits.length === 10) {
+          searchTerms.push(`+91${cleanDigits}`);
+          searchTerms.push(cleanDigits);
+        } else if (cleanDigits.length === 11 && cleanDigits.startsWith("0")) {
+          searchTerms.push(`+91${cleanDigits.slice(1)}`);
+          searchTerms.push(cleanDigits.slice(1));
+        } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
+          searchTerms.push(`+${cleanDigits}`);
+          searchTerms.push(cleanDigits.slice(2));
+        }
+
+        // 1. Fetch user by email or phone (supporting both with and without +91)
         const user = await prisma.user.findFirst({
           where: {
             OR: [
               { email: identifier },
-              { phoneNumber: identifier },
+              { phoneNumber: { in: Array.from(new Set(searchTerms)) } },
             ],
           },
         });

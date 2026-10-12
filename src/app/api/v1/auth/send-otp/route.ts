@@ -41,12 +41,25 @@ export async function POST(req: NextRequest) {
 
     const { emailOrPhone, password } = validation.data;
 
-    // 2. Validate email/phone and password first
+    // 2. Validate email/phone (with auto +91 phone detection) and password first
+    const cleanDigits = emailOrPhone.replace(/\D/g, "");
+    const searchTerms = [emailOrPhone];
+    if (cleanDigits.length === 10) {
+      searchTerms.push(`+91${cleanDigits}`);
+      searchTerms.push(cleanDigits);
+    } else if (cleanDigits.length === 11 && cleanDigits.startsWith("0")) {
+      searchTerms.push(`+91${cleanDigits.slice(1)}`);
+      searchTerms.push(cleanDigits.slice(1));
+    } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
+      searchTerms.push(`+${cleanDigits}`);
+      searchTerms.push(cleanDigits.slice(2));
+    }
+
     const user = await prisma.user.findFirst({
       where: {
         OR: [
           { email: emailOrPhone },
-          { phoneNumber: emailOrPhone },
+          { phoneNumber: { in: Array.from(new Set(searchTerms)) } },
         ],
       },
     });

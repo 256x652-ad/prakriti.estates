@@ -88,7 +88,7 @@ function LoginFormContent() {
             <input
               type="text"
               {...registerLogin("emailOrPhone")}
-              placeholder="admin@prakritiestates.com or +919999999999"
+              placeholder="admin@prakritiestates.com or 9999999999"
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
             {loginErrors.emailOrPhone && (
