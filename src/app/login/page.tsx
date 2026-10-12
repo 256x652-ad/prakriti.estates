@@ -9,20 +9,23 @@ function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const initialEmail = searchParams.get("emailOrPhone") || "";
 
-  const [emailOrPhone, setEmailOrPhone] = useState("");
+  const [emailOrPhone, setEmailOrPhone] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Direct Form Submit with explicit preventDefault
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async () => {
     setServerError(null);
 
     const trimmedInput = emailOrPhone.trim();
-    if (!trimmedInput || !password) {
-      setServerError("Please enter both your email/phone and password.");
+    if (!trimmedInput) {
+      setServerError("Please enter your email or 10-digit mobile number.");
+      return;
+    }
+    if (!password) {
+      setServerError("Please enter your password.");
       return;
     }
 
@@ -36,30 +39,31 @@ function LoginFormContent() {
       });
 
       if (!res || res.error) {
-        throw new Error("Invalid email/phone or password. Please verify and try again.");
+        setServerError("Invalid email/phone or password. Please check your credentials.");
+        setIsLoading(false);
+        return;
       }
 
-      // Check session to route Admin vs Regular user accurately
-      try {
-        const sessionRes = await fetch("/api/auth/session");
-        const session = await sessionRes.json();
-        const roles = session?.user?.roles || [];
-        const isAdmin =
-          roles.includes("ADMIN") ||
-          trimmedInput.toLowerCase().includes("admin") ||
-          trimmedInput.includes("9999999999");
+      // Check destination: Admin vs Regular user
+      const isUserAdmin =
+        trimmedInput.toLowerCase().includes("admin") ||
+        trimmedInput.includes("9999999999");
 
-        const target = isAdmin
-          ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
-          : callbackUrl;
+      const destination = isUserAdmin
+        ? (callbackUrl !== "/dashboard" ? callbackUrl : "/admin")
+        : callbackUrl;
 
-        window.location.href = target;
-      } catch {
-        window.location.href = callbackUrl !== "/dashboard" ? callbackUrl : "/admin";
-      }
+      window.location.href = destination;
     } catch (err: any) {
-      setServerError(err.message || "Failed to authenticate.");
+      setServerError(err.message || "An unexpected error occurred during sign-in.");
       setIsLoading(false);
+    }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleLogin();
     }
   };
 
@@ -85,18 +89,18 @@ function LoginFormContent() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} method="POST" action="#" className="space-y-4">
+        <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
               Email or Mobile Number
             </label>
             <input
               type="text"
-              name="emailOrPhone"
+              autoComplete="username"
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder="admin@prakritiestates.com or 9999999999"
-              required
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
@@ -112,23 +116,24 @@ function LoginFormContent() {
             </div>
             <input
               type="password"
-              name="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder="••••••••"
-              required
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
 
           <button
-            type="submit"
+            type="button"
+            onClick={handleLogin}
             disabled={isLoading}
             className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-semibold rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 cursor-pointer"
           >
             {isLoading ? "Signing in..." : "Sign In to Account →"}
           </button>
-        </form>
+        </div>
 
         <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
           New to Prakriti?{" "}
