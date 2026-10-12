@@ -66,7 +66,7 @@ function LoginFormContent() {
       setMaskedPhone(response.data?.phoneNumberMasked || "your mobile");
       if (response.data?.testOtp) {
         setTestOtp(response.data.testOtp);
-        setOtpValue("otp", response.data.testOtp);
+        setOtpValue("otp", response.data.testOtp, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
       }
 
       setStep("OTP");
@@ -140,7 +140,7 @@ function LoginFormContent() {
             <span>Test / Sandbox OTP:</span>
             <button
               type="button"
-              onClick={() => setOtpValue("otp", testOtp)}
+              onClick={() => setOtpValue("otp", testOtp, { shouldValidate: true, shouldDirty: true, shouldTouch: true })}
               className="font-mono font-bold underline cursor-pointer"
             >
               {testOtp} (Click to fill)

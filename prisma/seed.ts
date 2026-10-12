@@ -28,13 +28,17 @@ async function main() {
   await prisma.user.deleteMany();
 
   // 2. Create Users
+  const defaultPasswordHash = await bcrypt.hash('Admin@123', 10);
+
   const admin = await prisma.user.create({
     data: {
       phoneNumber: '+919999999999',
+      email: 'admin@prakritiestates.com',
       firstName: 'Admin',
       lastName: 'Prakriti',
       roles: ['ADMIN'],
       kycStatus: 'VERIFIED',
+      passwordHash: defaultPasswordHash,
     }
   });
 

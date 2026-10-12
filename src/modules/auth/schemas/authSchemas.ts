@@ -55,10 +55,13 @@ export type LoginFormValues = z.infer<typeof LoginFormSchema>;
  * Client-Side Two-Step Login Schema: Step 2 (SMS OTP Verification)
  */
 export const OtpVerificationSchema = z.object({
-  phoneNumber: PhoneSchema,
+  phoneNumber: PhoneSchema.optional(),
   otp: OtpSchema,
 });
 
-export const VerifyOtpSchema = OtpVerificationSchema;
+export const VerifyOtpSchema = z.object({
+  phoneNumber: PhoneSchema,
+  otp: OtpSchema,
+});
 
 export type OtpVerificationValues = z.infer<typeof OtpVerificationSchema>;
