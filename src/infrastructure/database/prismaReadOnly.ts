@@ -21,24 +21,26 @@ import { PrismaClient } from "@prisma/client";
  *    Analytical services strictly import `prismaReadOnly` instead of `prisma`.
  */
 
+import { prisma } from "./prisma";
+
 const globalForPrismaRO = global as unknown as { prismaReadOnly: PrismaClient };
 
-const readReplicaUrl = process.env.DATABASE_RO_URL || process.env.DATABASE_URL;
+// When a dedicated read-replica URL is provided in production, route through replica.
+// In dev/local without a distinct read-replica, reuse the shared prisma pool to prevent EMAXCONNSESSION.
+const hasDedicatedReplica = Boolean(process.env.DATABASE_RO_URL && process.env.DATABASE_RO_URL !== process.env.DATABASE_URL);
 
-export const prismaReadOnly =
-  globalForPrismaRO.prismaReadOnly ||
-  new PrismaClient({
-    datasources: {
-      db: {
-        url: readReplicaUrl,
-      },
-    },
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["warn", "error"]
-        : ["error"],
-  });
+export const prismaReadOnly: PrismaClient = hasDedicatedReplica
+  ? (globalForPrismaRO.prismaReadOnly ||
+      new PrismaClient({
+        datasources: {
+          db: {
+            url: process.env.DATABASE_RO_URL,
+          },
+        },
+        log: ["error"],
+      }))
+  : prisma;
 
-if (process.env.NODE_ENV !== "production") {
+if (hasDedicatedReplica && process.env.NODE_ENV !== "production") {
   globalForPrismaRO.prismaReadOnly = prismaReadOnly;
 }

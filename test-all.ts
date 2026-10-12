@@ -254,6 +254,13 @@ async function runComprehensiveTests() {
     const healthSummary = await platformHealthReportWorker.executeNow();
     console.log("   ✅ Daily Health Report Worker Executed. DLQ Errors:", healthSummary.dlqErrorsCount, "| KYC Failure Rate:", `${healthSummary.kycFailureRate}%`, "| Status:", healthSummary.status);
 
+    // D. Step-Up 2FA Challenge on Important Transactions
+    const { stepUpVerificationService } = await import('./src/modules/auth/services/StepUpVerificationService');
+    const challenge = await stepUpVerificationService.requestChallenge(buyer.id, "PROPERTY_LOCK");
+    console.log("   ✅ Step-Up 2FA Challenge Dispatched for Important Transaction:", challenge.action);
+    const stepUpRes = await stepUpVerificationService.verifyChallenge(buyer.id, "PROPERTY_LOCK", challenge.testOtp!);
+    console.log("   ✅ Step-Up 2FA Verified. Token Generated:", stepUpRes.stepUpToken.slice(0, 8) + "...");
+
     passedCount++;
 
     // ---------------------------------------------------------

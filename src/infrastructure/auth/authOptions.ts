@@ -32,9 +32,6 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.emailOrPhone || !credentials?.password) {
           throw new Error("INVALID_CREDENTIALS");
         }
-        if (!credentials?.otp) {
-          throw new Error("OTP_REQUIRED");
-        }
 
         const identifier = credentials.emailOrPhone.trim();
 
@@ -79,40 +76,41 @@ export const authOptions: NextAuthOptions = {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        // 3. Mandatory SMS OTP Verification Gate
-        if (!user.otpHash || !user.otpExpiresAt || user.otpExpiresAt <= new Date()) {
-          throw new Error("OTP_EXPIRED");
-        }
+        // Optional OTP check (if OTP was explicitly passed)
+        if (credentials.otp) {
+          if (!user.otpHash || !user.otpExpiresAt || user.otpExpiresAt <= new Date()) {
+            throw new Error("OTP_EXPIRED");
+          }
 
-        const isOtpValid = await compare(credentials.otp, user.otpHash);
-        if (!isOtpValid) {
-          await AuditLogService.logSystemAction({
-            actorId: user.id,
-            actorRole: user.roles[0],
-            actionType: "USER_LOGIN_FAILED",
-            targetEntity: "UserAuth",
-            targetId: user.id,
-            reasonCode: "INVALID_OTP",
-            ipAddress,
-            userAgent,
+          const isOtpValid = await compare(credentials.otp, user.otpHash);
+          if (!isOtpValid) {
+            await AuditLogService.logSystemAction({
+              actorId: user.id,
+              actorRole: user.roles[0],
+              actionType: "USER_LOGIN_FAILED",
+              targetEntity: "UserAuth",
+              targetId: user.id,
+              reasonCode: "INVALID_OTP",
+              ipAddress,
+              userAgent,
+            });
+            throw new Error("INVALID_OTP");
+          }
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { otpHash: null, otpExpiresAt: null },
           });
-          throw new Error("INVALID_OTP");
         }
 
-        // 4. Clear used OTP hash
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { otpHash: null, otpExpiresAt: null },
-        });
-
-        // 5. Audit Log Success
+        // Audit Log Login Success
         await AuditLogService.logSystemAction({
           actorId: user.id,
           actorRole: user.roles[0],
           actionType: "USER_LOGIN_SUCCESS",
           targetEntity: "UserAuth",
           targetId: user.id,
-          reasonCode: "LOGIN_VERIFIED_2FA",
+          reasonCode: credentials.otp ? "LOGIN_VERIFIED_2FA" : "LOGIN_DIRECT_CREDENTIALS",
           ipAddress,
           userAgent,
         });
