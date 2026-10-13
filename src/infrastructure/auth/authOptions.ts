@@ -12,6 +12,7 @@ import { Role } from "@prisma/client";
  * 2. Mandatory SMS OTP Verification Gate before JWT issuance
  */
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET || "a_random_secure_string_for_development",
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -33,11 +34,12 @@ export const authOptions: NextAuthOptions = {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        const identifier = credentials.emailOrPhone.trim();
+        const rawIdentifier = credentials.emailOrPhone.trim();
+        const identifier = rawIdentifier.toLowerCase();
 
         // Normalize phone number (e.g. "9999999999" -> ["9999999999", "+919999999999"])
-        const cleanDigits = identifier.replace(/\D/g, "");
-        const searchTerms = [identifier];
+        const cleanDigits = rawIdentifier.replace(/\D/g, "");
+        const searchTerms = [rawIdentifier, identifier];
         if (cleanDigits.length === 10) {
           searchTerms.push(`+91${cleanDigits}`);
           searchTerms.push(cleanDigits);
@@ -49,11 +51,11 @@ export const authOptions: NextAuthOptions = {
           searchTerms.push(cleanDigits.slice(2));
         }
 
-        // 1. Fetch user by email or phone (supporting both with and without +91)
+        // 1. Fetch user by email (case-insensitive) or phone (supporting both with and without +91)
         const user = await prisma.user.findFirst({
           where: {
             OR: [
-              { email: identifier },
+              { email: { equals: identifier, mode: "insensitive" } },
               { phoneNumber: { in: Array.from(new Set(searchTerms)) } },
             ],
           },
@@ -207,5 +209,4 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/login",
   },
-  secret: process.env.NEXTAUTH_SECRET,
 };

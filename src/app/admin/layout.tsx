@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
 import ImpersonationBanner from "@/components/Admin/ImpersonationBanner";
+import AdminHeaderActions from "@/components/Admin/AdminHeaderActions";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | Prakriti Estates",
@@ -96,15 +97,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               Environment: Production Cluster
             </span>
           </div>
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-black text-xs">
-              SA
-            </div>
-            <div className="text-left">
-              <span className="block text-xs font-bold text-slate-800 leading-tight">Super Admin</span>
-              <span className="block text-[10px] text-slate-400">Prakriti Operations</span>
-            </div>
-          </div>
+          <AdminHeaderActions />
         </header>
         <div className="flex-1 overflow-auto p-8">
           {children}
