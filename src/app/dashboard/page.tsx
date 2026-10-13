@@ -3,6 +3,7 @@ import { authOptions } from "@/infrastructure/auth/authOptions";
 import { redirect } from "next/navigation";
 import { prisma } from "@/infrastructure/database/prisma";
 import Link from "next/link";
+import SignOutButton from "@/components/Dashboard/SignOutButton";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -98,6 +99,9 @@ export default async function DashboardPage() {
                 Super Admin Portal →
               </Link>
             )}
+
+            {/* Account Sign Out Button */}
+            <SignOutButton />
           </div>
         </div>
 

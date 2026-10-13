@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 
@@ -98,11 +99,13 @@ export function AppShell({ children, user }: AppShellProps) {
                     {userRoles[0] || "MEMBER"}
                   </span>
                 </div>
-                <Link href="/api/auth/signout">
-                  <Button variant="ghost" size="sm">
-                    Sign Out
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                >
+                  Sign Out
+                </Button>
               </div>
             ) : (
               <div className="hidden sm:flex items-center gap-2">
@@ -166,11 +169,16 @@ export function AppShell({ children, user }: AppShellProps) {
                   <p className="font-bold text-slate-800">{user?.name || user?.phoneNumber}</p>
                   <p className="text-slate-500 font-mono">{user?.phoneNumber}</p>
                 </div>
-                <Link href="/api/auth/signout" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full">
-                    Sign Out
-                  </Button>
-                </Link>
+                <Button
+                  variant="outline"
+                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    signOut({ callbackUrl: "/" });
+                  }}
+                >
+                  Sign Out
+                </Button>
               </>
             ) : (
               <>

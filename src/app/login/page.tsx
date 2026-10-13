@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, UserCheck } from "lucide-react";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -12,6 +12,7 @@ function LoginFormContent() {
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const initialEmail = searchParams.get("emailOrPhone") || "";
 
+  const { data: session } = useSession();
   const [emailOrPhone, setEmailOrPhone] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,7 +42,16 @@ function LoginFormContent() {
       });
 
       if (!res || res.error) {
-        setServerError("Invalid email/phone or password. Please check your credentials.");
+        console.error("[Login] Authentication error details:", res?.error);
+        if (res?.error === "CredentialsSignin") {
+          setServerError("Invalid email/phone or password. Please check your credentials.");
+        } else if (res?.error === "csrf") {
+          setServerError("Security token expired (CSRF). Please refresh the page and try again.");
+        } else if (res?.error) {
+          setServerError(`Sign-in error: ${res.error}. Please check your credentials.`);
+        } else {
+          setServerError("Invalid email/phone or password. Please check your credentials.");
+        }
         setIsLoading(false);
         return;
       }
@@ -83,6 +93,43 @@ function LoginFormContent() {
             Access your dashboard, verified properties, and command center
           </p>
         </div>
+
+        {/* Active Session Notification */}
+        {session?.user && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+                <span>Active Session: {session.user.name || session.user.email}</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-200 text-emerald-900">
+                {(session.user as any)?.roles?.[0] || "ACTIVE"}
+              </span>
+            </div>
+            <p className="text-emerald-800 leading-relaxed">
+              You are already logged in on this browser. You can proceed directly or switch to another account.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const isUserAdmin = (session.user as any)?.roles?.some((r: string) => ["ADMIN", "SUPER_ADMIN"].includes(r));
+                  window.location.href = isUserAdmin ? "/admin" : callbackUrl;
+                }}
+                className="flex-1 py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs transition cursor-pointer text-center"
+              >
+                Go to {(session.user as any)?.roles?.includes("ADMIN") ? "Admin Console" : "Dashboard"} →
+              </button>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="py-2 px-3 bg-white border border-slate-200 text-red-600 hover:bg-red-50 rounded-xl font-semibold text-xs transition cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
 
         {serverError && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
@@ -150,6 +197,45 @@ function LoginFormContent() {
           >
             {isLoading ? "Signing in..." : "Sign In to Account →"}
           </button>
+
+          {/* Quick Test Accounts */}
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center">
+              Quick Test Accounts
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailOrPhone("admin@prakritiestates.com");
+                  setPassword("Admin@123");
+                  setServerError(null);
+                }}
+                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition cursor-pointer"
+              >
+                <div className="font-bold text-slate-800 flex items-center gap-1">
+                  <span>🛡️</span>
+                  <span>Super Admin</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">admin@prakritiestates.com</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailOrPhone("buyer@prakritiestates.com");
+                  setPassword("Buyer@123");
+                  setServerError(null);
+                }}
+                className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition cursor-pointer"
+              >
+                <div className="font-bold text-slate-800 flex items-center gap-1">
+                  <span>🏡</span>
+                  <span>Verified Buyer</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">buyer@prakritiestates.com</div>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
